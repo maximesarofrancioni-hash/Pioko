@@ -26,7 +26,7 @@ FILTERLAB_FLAGS = $(ARCH) $(WARNINGS) -fsigned-char -g $(OPTIMIZE) \
 	-D__circle__=$(CIRCLEVER) -DRASPPI=$(RASPPI) \
 	-fno-exceptions -fno-rtti -fno-threadsafe-statics -fno-math-errno \
 	-fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
-	-std=c++20 $(SST_INC) \
+	-std=gnu++20 $(SST_INC) \
 	-Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable -Wno-psabi
 
 filterlab.o filterlab.d: CPPFLAGS := $(FILTERLAB_FLAGS)
