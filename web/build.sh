@@ -24,8 +24,8 @@ OSRC="$O/dsp/buffer.cpp $O/dsp/interpolate.cpp $O/synth/saw_osc.cpp $O/synth/saw
 # -Iwave first: wave/config/audio_config.h runs osc440 at 44.1 kHz instead of 48 kHz
 emcc -std=c++20 -O3 -msimd128 -msse4.1 -fno-exceptions -Wno-deprecated-enum-float-conversion \
   -DTEST -Iwave -I$O -I$E -Imods -I$L/sst-filters/include -I$L/sst-basic-blocks/include -I$L/simde \
-  wasm_api.cpp wave/wave_lane.cpp mods/mods.cpp ../src/filterlab.cpp $OSRC $MSRC -o filterlab.wasm \
-  --no-entry -sSTANDALONE_WASM -sTOTAL_STACK=262144 -sINITIAL_MEMORY=33554432
+  wasm_api.cpp wave/wave_lane.cpp mods/mods.cpp ../src/filterlab.cpp ../src/sampler.cpp $OSRC $MSRC -o filterlab.wasm \
+  --no-entry -sSTANDALONE_WASM -sTOTAL_STACK=262144 -sINITIAL_MEMORY=50331648
 # the display: 150 x 112, shown at 4x on the 600 x 450 AMOLED (600 x 448). A copy of board.h and gfx.c with that size.
 mkdir -p screen/gen
 sed -e 's/^#define LCD_W 160/#define LCD_W 150/' -e 's/^#define LCD_H 80/#define LCD_H 112/' $F/board.h > screen/gen/board.h

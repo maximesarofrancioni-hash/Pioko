@@ -1,4 +1,6 @@
-# filter-lab
+# Pyoko ぴょこ
+
+(The repository and files keep their old filter-lab names.)
 
 A bare-metal Pi 4 kernel ([Circle](https://github.com/rsta2/circle)) for
 auditioning the Surge Synth Team's
@@ -57,7 +59,25 @@ s          cutoff sweep on/off          t / T    tempo -/+ 5 BPM
 1-4        mute bass/lead/stab/noise    i        print status
 l          pick lane to edit (bass, lead, stab, noise, accent)
 z / x      hits -/+     , / .   steps -/+     v / b   rotate -/+
+
+sampler
+m          mute / unmute                k        demo break
+w          resample 2 bars (from the next downbeat)
+g          slices 4 / 8 / 16 / auto     y / Y    auto sensitivity -/+
+o          step / random slice order    O        one shot / slice
+j / J      pitch -/+ 1 st               q        varispeed / keep time
+a / A      sampler hits -/+
 ```
+
+## Sampler
+
+`src/sampler.h/.cpp`: plain C++, shared by the Pi kernel and the page. One mono sample in RAM (on the Pi
+`SAMPLER_FRAMES` floats from the heap, 64 MB = 5.8 min at 48 kHz by default), on its own Euclidean lane. Slice
+mode cuts the START..END region into 4/8/16 slices or at its onsets (auto: energy-rise detection, up to 16), and each
+hit plays the slice under its step (or a random one), choking the previous one; one shot plays the region. Pitch
++-24 st + fine cents (Hermite), varispeed or keep time (two 40 ms grains), attack, decay (0 = hold),
+reverse, 4 voices. Resample records the mix from the next downbeat for 1/2/4 bars. A synthesised one-bar break is
+loaded at boot. Loading files from the SD card is not in the kernel yet (the page loads any audio file).
 
 The DSP load (% of one core), clock and SoC temperature are logged every
 10 s.
@@ -124,11 +144,13 @@ taskbar.
 ## Browser version
 
 Pages (Elektron-style keys): MODEL, EUCLID | SHIFT (Turing Machine-style register), MARBLES | PLAY, OSC, FLTR, ENV
-(osc440) | TIDES (Tides 2, 4 outputs routed to osc440 / filter lab / Beads) | BEADS, VINYL. The Mutable
+(osc440) | SAMPLER | TIDES (Tides 2, 4 outputs routed to osc440 / filter lab / Beads) | BEADS, VINYL. The Mutable
 Instruments code comes from pichenettes/eurorack (MIT), unmodified, via `web/mods/`; `build.sh` needs `MI=` pointing
 at a eurorack checkout with stmlib cloned into it.
 
-The page has three tabs: Filter lab (this engine), Wavetable (osc440's TripleWaveGroup on a sixth
+The display is 150 x 112, shown at 4x on a 600 x 450 AMOLED. Its footer has two parameter lines: line 1 is what
+the four front panel encoders turn on the current page, line 2 the four encoders under the screen (the page maps eight
+parameters per page in `PAGES`; the panel under the display mirrors them). The engine parts: Filter lab, Wavetable (osc440's TripleWaveGroup on a sixth
 Euclidean lane, built from your pico-osc440 sources at 44.1 kHz via `web/wave/`) and Vinyl Sim (the decoded
 SP-303 program on the master bus). `web/build.sh` needs `LIBS_DIR`, `MPK4` and `OSC440` pointing at the checkouts.
 

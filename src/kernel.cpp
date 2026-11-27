@@ -8,7 +8,11 @@
 #include <circle/util.h>
 #include <circle/string.h>
 
-static const char FromKernel[] = "filterlab";
+static const char FromKernel[] = "pyoko";
+
+// the sampler's RAM comes from the heap in Initialize() (Circle keeps the kernel image + BSS under 2 MB)
+
+static float Clamp (float x, float lo, float hi);
 
 static const char *kLaneName[] = {"bass", "lead", "stab", "noise", "accent"};
 
@@ -25,6 +29,8 @@ CKernel::CKernel (void)
 	m_HoldPin (PIN_HOLD, GPIOModeInputPullUp),
 #endif
 	m_nEditLane (1),
+	m_nLastStep (-1),
+	m_nLastBar (-1),
 	m_nBusyTicks (0),
 	m_nLedOffAt (0),
 	m_nLastNext (HIGH), m_nLastHold (HIGH),
@@ -58,6 +64,27 @@ TShutdownMode CKernel::Run (void)
 			SAMPLE_RATE);
 
 	m_Lab.Init ((float) SAMPLE_RATE);
+	{
+		unsigned nFrames = SAMPLER_FRAMES;
+		float *pRAM = nullptr;
+		while (nFrames >= (1u << 18) && (pRAM = new float[nFrames]) == nullptr)
+		{
+			nFrames /= 2;			// not that much free: take what there is
+		}
+		if (pRAM == nullptr)
+		{
+			m_Logger.Write (FromKernel, LogError, "No memory for the sampler");
+			nFrames = 0;
+		}
+		else
+		{
+			memset (pRAM, 0, nFrames * sizeof (float));
+		}
+		m_Sampler.Init (pRAM, (int) nFrames, (float) SAMPLE_RATE);
+		m_Logger.Write (FromKernel, LogNotice, "Sampler: %u MB of RAM, %u s at %u Hz",
+				nFrames * 4u >> 20, nFrames / SAMPLE_RATE, SAMPLE_RATE);
+	}
+	m_Sampler.MakeDemo ();
 	m_Lab.barsPerFilter = DEFAULT_BARS_PER_FILTER;
 
 	if (!m_Sound.AllocateQueueFrames (QUEUE_FRAMES))
@@ -142,6 +169,26 @@ void CKernel::FillQueue (unsigned nFrames)
 	{
 		u64 t0 = CTimer::GetClockTicks64 ();
 		m_Lab.Render (L, R);
+
+		// the sampler on its own lane, clocked by the lab's 16ths; it can resample the lab
+		int nStep = m_Lab.Step (), nBar = m_Lab.Bar ();
+		if (nStep != m_nLastStep || nBar != m_nLastBar)
+		{
+			m_nLastStep = nStep; m_nLastBar = nBar;
+			double fSp16 = SAMPLE_RATE * 60.0 / m_Lab.bpm / 4.0;
+			m_Sampler.Tick ((nStep + 15) % 16, nBar, fSp16);
+		}
+		m_Sampler.Capture (L, R, FilterLab::kBlock);
+		m_Sampler.Render (L, R, FilterLab::kBlock);
+		for (int i = 0; i < FilterLab::kBlock; i++)
+		{
+			L[i] = Clamp (L[i], -1.f, 1.f);
+			R[i] = Clamp (R[i], -1.f, 1.f);
+		}
+		if (m_Sampler.TakeRecorded ())
+		{
+			m_Logger.Write (FromKernel, LogNotice, "Resampled %u frames", (unsigned) m_Sampler.Length ());
+		}
 		m_nBusyTicks += CTimer::GetClockTicks64 () - t0;
 
 		for (int i = 0; i < FilterLab::kBlock; i++)
@@ -242,6 +289,26 @@ void CKernel::HandleKey (char c)
 				kLaneName[m_nEditLane], nHits, nSteps, nRot);
 		return;
 
+	// sampler
+	case 'm': m_Sampler.on = !m_Sampler.on; break;
+	case 'k': m_Sampler.MakeDemo (); break;
+	case 'w': m_Sampler.Arm (2); m_Logger.Write (FromKernel, LogNotice, "Resample armed: 2 bars from the next downbeat"); return;
+	case 'g':					// 4, 8, 16, auto
+		if (m_Sampler.autoSlice) { m_Sampler.autoSlice = false; m_Sampler.slices = 4; }
+		else if (m_Sampler.slices == 16) m_Sampler.autoSlice = true;
+		else m_Sampler.slices *= 2;
+		m_Sampler.Update ();
+		break;
+	case 'y': m_Sampler.sens = Clamp (m_Sampler.sens - 0.1f, 0.f, 1.f); m_Sampler.Update (); break;
+	case 'Y': m_Sampler.sens = Clamp (m_Sampler.sens + 0.1f, 0.f, 1.f); m_Sampler.Update (); break;
+	case 'q': m_Sampler.pitchMode ^= 1; break;
+	case 'o': m_Sampler.order ^= 1; break;
+	case 'O': m_Sampler.mode ^= 1; break;
+	case 'j': m_Sampler.pitch = Clamp (m_Sampler.pitch - 1.f, -24.f, 24.f); break;
+	case 'J': m_Sampler.pitch = Clamp (m_Sampler.pitch + 1.f, -24.f, 24.f); break;
+	case 'a': m_Sampler.hits = m_Sampler.hits > 0 ? m_Sampler.hits - 1 : 0; break;
+	case 'A': m_Sampler.hits = m_Sampler.hits < m_Sampler.steps ? m_Sampler.hits + 1 : m_Sampler.steps; break;
+
 	case '?': PrintHelp (); return;
 	case 'i': break;
 	default: return;
@@ -263,6 +330,11 @@ void CKernel::PrintStatus (void)
 			F.FilterIndex () + 1, F.FilterName (), (double) F.resonance,
 			(double) F.cutoffOffset, (double) F.envAmount, (double) F.drive,
 			F.sweep ? "on" : "off", (double) F.bpm, (const char *) Mutes);
+	m_Logger.Write (FromKernel, LogNotice, "sampler %s | %s %d%s | pitch %+.0f %s | E(%d,%d) | %u frames",
+			m_Sampler.on ? "on" : "muted", m_Sampler.mode ? (m_Sampler.autoSlice ? "auto" : "slice") : "one shot",
+			m_Sampler.NumSlices (), m_Sampler.order ? " rnd" : "", (double) m_Sampler.pitch,
+			m_Sampler.pitchMode ? "keep" : "vari", m_Sampler.hits, m_Sampler.steps,
+			(unsigned) m_Sampler.Length ());
 }
 
 void CKernel::PrintHelp (void)
@@ -270,4 +342,7 @@ void CKernel::PrintHelp (void)
 	m_Logger.Write (FromKernel, LogNotice,
 		"Keys: n/p next/prev filter, h hold, r/R reso, c/C cutoff, e/E env, d/D drive, "
 		"s sweep, t/T tempo, 1-4 mute lanes, l pick lane, z/x hits, ,/. steps, v/b rotate, i status");
+	m_Logger.Write (FromKernel, LogNotice,
+		"Sampler: m mute, k demo break, w resample 2 bars, g slices 4/8/16/auto, y/Y auto sens, o random order, "
+		"O one shot/slice, j/J pitch, q varispeed/keep time, a/A hits");
 }

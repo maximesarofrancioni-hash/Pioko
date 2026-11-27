@@ -5,7 +5,7 @@
 CIRCLEHOME ?= ../circle
 LIBS_DIR   ?= ../libs
 
-OBJS	= main.o kernel.o filterlab.o
+OBJS	= main.o kernel.o filterlab.o sampler.o
 
 LIBS	= $(CIRCLEHOME)/lib/sound/libsound.a \
 	  $(CIRCLEHOME)/lib/libcircle.a
@@ -30,5 +30,7 @@ FILTERLAB_FLAGS = $(ARCH) $(WARNINGS) -fsigned-char -g $(OPTIMIZE) \
 	-Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable -Wno-psabi
 
 filterlab.o filterlab.d: CPPFLAGS := $(FILTERLAB_FLAGS)
+# the sampler: plain C++ and libm, built the same way
+sampler.o sampler.d: CPPFLAGS := $(FILTERLAB_FLAGS)
 
 -include $(DEPS)

@@ -4,7 +4,14 @@
 #include "mods/mods.h"
 #include <cmath>
 
+#include "../src/sampler.h"
 static FilterLab lab;
+// the sampler's RAM: 2^21 mono frames (47.5 s at 44.1 kHz, 8 MB) in the page; on the Pi a static array too
+static constexpr int kSmpFrames = 1 << 21;
+static float smpRam[kSmpFrames];
+static Sampler smp;
+static float smpInfo[32];
+static uint8_t smpOv[256];
 static WaveLane wave;
 static float wbuf[512];
 static float waveL[FilterLab::kBlock], waveR[FilterLab::kBlock];   // the wave lane alone, for its spectrum
@@ -28,6 +35,7 @@ API void fl_init(float sr)
     mods::MarblesInit(sr / FilterLab::kBlock);
     mods::TidesInit();
     mods::BeadsInit();
+    smp.Init(smpRam, kSmpFrames, sr); smp.MakeDemo();
 }
 
 // Tides destinations: osc440 parameter id (or -1 for the others) and the range of a full-scale output
@@ -53,6 +61,7 @@ API void fl_render()
         double sp16 = sampleRate * 60.0 / lab.bpm / 4.0;
         int step = (st + 15) % 16;
         wave.Tick(step, bar, sp16);
+        smp.Tick(step, bar, sp16);
         if (wave.mode == WaveLane::kShift)
         {
             // the register advances on every 16th; the gate mode decides which steps play
@@ -87,6 +96,9 @@ API void fl_render()
     for (int i = 0; i < FilterLab::kBlock; ++i) waveL[i] = waveR[i] = 0.f;
     wave.Render(waveL, waveR, FilterLab::kBlock);
     for (int i = 0; i < FilterLab::kBlock; ++i) { outL[i] += waveL[i]; outR[i] += waveR[i]; }
+    // the sampler: resamples the filter lab + wave lane mix, then plays into it (before Beads and the Vinyl Sim)
+    smp.Capture(outL, outR, FilterLab::kBlock);
+    smp.Render(outL, outR, FilterLab::kBlock);
     // Beads on the mix, before the Vinyl Sim (which runs in the worklet)
     if (beads.on)
     {
@@ -210,3 +222,39 @@ API float *fl_mod_info()
     modInfo[28] = beads.inLevel; modInfo[29] = beads.outLevel;
     return modInfo;
 }
+
+// ---- sampler
+// keys: 0 start, 1 end, 2 pitch, 3 level, 4 attack ms, 5 decay ms, 6 mode, 7 slices, 8 order, 9 reverse, 10 on,
+//       11 steps, 12 hits, 13 rotate, 14 fine (cents), 15 pitch mode, 16 auto slices, 17 sensitivity
+API void fl_smp_set(int key, float v)
+{
+    switch (key)
+    {
+    case 0: smp.start = v; break; case 1: smp.end = v; break; case 2: smp.pitch = v; break; case 3: smp.level = v; break;
+    case 4: smp.attackMs = v; break; case 5: smp.decayMs = v; break; case 6: smp.mode = (int)v; break;
+    case 7: smp.slices = (int)v; break; case 8: smp.order = (int)v; break; case 9: smp.reverse = v > 0.5f; break;
+    case 10: smp.on = v > 0.5f; break; case 11: smp.steps = (int)v; break; case 12: smp.hits = (int)v; break;
+    case 13: smp.rotate = (int)v; break;
+    case 14: smp.fine = v; break; case 15: smp.pitchMode = (int)v; break;
+    case 16: smp.autoSlice = v > 0.5f; break; case 17: smp.sens = v; break;
+    }
+    smp.Update();
+}
+API float *fl_smp_ram() { return smp.Ram(); }
+API int fl_smp_cap() { return smp.Capacity(); }
+API void fl_smp_loaded(int frames) { smp.SetLength(frames); }
+API void fl_smp_demo() { smp.MakeDemo(); }
+API void fl_smp_arm(int bars) { smp.Arm(bars); }
+API void fl_smp_trigger(int slice) { smp.Trigger(slice); }
+// [0..3] voice positions (0..1, -1 idle), [4] last slice, [5] rec state, [6] rec progress, [7] length (frames),
+// [8] triggers, [9] 1 when a recording just finished, [10] slices n, [11..11+n] slice edges (0..1)
+API float *fl_smp_info()
+{
+    for (int v = 0; v < 4; ++v) smpInfo[v] = smp.VoicePos(v);
+    smpInfo[4] = (float)smp.LastSlice(); smpInfo[5] = (float)smp.RecState(); smpInfo[6] = smp.RecProgress();
+    smpInfo[7] = (float)smp.Length(); smpInfo[8] = (float)smp.Triggers(); smpInfo[9] = smp.TakeRecorded() ? 1.f : 0.f;
+    int n = smp.NumSlices(); smpInfo[10] = (float)n;
+    for (int i = 0; i <= n; ++i) smpInfo[11 + i] = smp.Length() ? (float)smp.SliceStart(i) / smp.Length() : 0.f;
+    return smpInfo;
+}
+API uint8_t *fl_smp_overview(int cols) { if (cols > 256) cols = 256; smp.Overview(smpOv, cols); return smpOv; }

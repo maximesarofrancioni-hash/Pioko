@@ -1,7 +1,7 @@
-/* filter-lab screens, for a 600 x 450 AMOLED: drawn on a 150 x 112 RGB565 canvas, shown at 4x = 600 x 448
+/* Pyoko (ぴょこ) screens, for a 600 x 450 AMOLED: drawn on a 150 x 112 RGB565 canvas, shown at 4x = 600 x 448
  * (each canvas pixel a 4x4 block - the chunky dot-matrix look of the original 160 x 80 screen; 1 row spare top and bottom).
  * Built on the firmware's own gfx.c (primitives, 3x5 dot-matrix font, themes); the splash is a terminal boot log,
- * following its layout rules: status strip y 0..7, hero zone y 8..101, footer y 102..111 with the four knob columns,
+ * following its layout rules: status strip y 0..7, hero zone y 8..92, footer y 93..111: line 1 = the front panel encoders, line 2 = the 4 encoders under the screen with the four knob columns,
  * popups that take over the hero zone (enter 140 ms, hold 800 ms, exit 110 ms), afterglow on phosphor themes.
  *
  * Screens: HOME (model number + name, bar ring, lane pads), FILTER (live spectrum + cutoff marker),
@@ -12,9 +12,9 @@
 #include "ui_int.h"
 
 /* layout */
-#define FOOT_Y (H - 10)              /* footer rule */
+#define FOOT_Y (H - 19)              /* footer rule: two parameter lines under it */
 #define GT 37                        /* graph zone top */
-#define GB (H - 14)                  /* graph zone bottom (floor) */
+#define GB (FOOT_Y - 5)              /* graph zone bottom (floor) */
 #define GH (GB - GT)                 /* graph height */
 #define NCOL ((W - 8) / 4 + 1)       /* LED columns on the 4 px pitch: 36 */
 #define XR (W - 3)                   /* right edge for right-aligned text */
@@ -24,7 +24,7 @@
 const theme_t *T = &EMBER;          /* the theme of the frame being drawn (ui_boot.c reads it) */
 uint32_t ui_chord_flash;
 
-enum { SCR_FL_HOME, SCR_FL_FILTER, SCR_FL_EUCLID, SCR_FL_VINYL, SCR_FL_WAVE, SCR_FL_ENV, SCR_FL_LFO, SCR_FL_WFLT, SCR_FL_PLAY, SCR_FL_SHIFT, SCR_FL_MARBLES, SCR_FL_BEADS, SCR_FL_MATRIX, SCR_FL_N };
+enum { SCR_FL_HOME, SCR_FL_FILTER, SCR_FL_EUCLID, SCR_FL_VINYL, SCR_FL_WAVE, SCR_FL_ENV, SCR_FL_LFO, SCR_FL_WFLT, SCR_FL_PLAY, SCR_FL_SHIFT, SCR_FL_MARBLES, SCR_FL_BEADS, SCR_FL_MATRIX, SCR_FL_SAMPLER, SCR_FL_N };
 enum { POP_OFF, POP_FL_KNOB, POP_FL_MODEL };
 enum { ENTER_MS = 140, HOLD_MS = 800, EXIT_MS = 110, LANES = 5, BINS = 64 };
 
@@ -53,6 +53,11 @@ static struct {
     char p_group[24]; int p_mode, p_oct, p_vol, p_steps, p_hits, p_rot, p_on;
     /* shared by SHIFT / MARBLES / TIDES / BEADS: title, subtitle and footer text set from the page */
     char m_title[20], m_sub[44], m_fl[4][6], m_fv[4][8];
+    char f_l[8][6], f_v[8][8];        /* the two parameter lines, from the page: 0-3 front panel, 4-7 screen encoders */
+    uint8_t s_ov[W];                 /* SAMPLER: peak per column over the whole sample, 0..255 */
+    int s_len, s_start, s_end, s_slices, s_mode, s_last, s_rec, s_prog, s_pos[4];   /* region / positions 0..1000 */
+    int s_steps, s_hits, s_rot, s_on;
+    int s_nb; int16_t s_b[17];       /* slice edges 0..1000 */
     uint16_t sh_bits; int sh_len; int8_t sh_hist[16];
     uint8_t mb_t[32], mb_x1[32], mb_x3[32]; int mb_n;          /* per 16th: t1|t3<<1, X in 0..255 */
     int8_t td[4][128]; int td_n;                                /* Tides outputs, -64..63 */
@@ -90,7 +95,7 @@ static bool hit(int l, int s)
 /* ---------------------------------------------------------------- chrome */
 static void status(uint32_t now)
 {
-    static const char *const NAMES[SCR_FL_N] = { "HOME", "FILTER", "EUCLID", "VINYL", "WAVE", "ENV", "TIDES", "WT FLT", "PLAY", "SHIFT", "MARBLES", "BEADS", "MATRIX" };
+    static const char *const NAMES[SCR_FL_N] = { "HOME", "FILTER", "EUCLID", "VINYL", "WAVE", "ENV", "TIDES", "WT FLT", "PLAY", "SHIFT", "MARBLES", "BEADS", "MATRIX", "SAMPLER" };
     char b[16];
     gfx_rect(0, 0, W, 7, T->bg);
     snprintf(b, sizeof b, "%02d", M.screen + 1); gfx_text(b, 2, 1, T->dim, 1);
@@ -110,16 +115,25 @@ static void status(uint32_t now)
     gfx_rect(0, UI_STATUS_H - 1, W, 1, T->line);
 }
 
+/* the footer: two lines of four columns. Line 1 is what the four front panel encoders turn, line 2 what the
+ * four encoders under the screen turn; the page sets both (scr_foot). Each column a dim label, the value in that
+ * column's colour. The screens still pass their old single line, which is ignored. */
 void ui_footer(const char *l0, const char *v0, const char *l1, const char *v1,
                const char *l2, const char *v2, const char *l3, const char *v3)
 {
-    const char *c[4][2] = { { l0, v0 }, { l1, v1 }, { l2, v2 }, { l3, v3 } };
+    (void)l0; (void)v0; (void)l1; (void)v1; (void)l2; (void)v2; (void)l3; (void)v3;
     gfx_rect(0, FOOT_Y, W, 1, T->line);
-    for (int i = 0; i < 4; i++) {
-        int x = i * (W / 4) + 2;
-        gfx_text(c[i][0], x, FOOT_Y + 3, T->dim, 1);
-        gfx_text(c[i][1], x + gfx_text_w(c[i][0], 1) + 3, FOOT_Y + 3, tk(i), 1);
-    }
+    for (int r = 0; r < 2; r++)
+        for (int i = 0; i < 4; i++) {
+            const char *l = M.f_l[r * 4 + i], *v = M.f_v[r * 4 + i];
+            if (!l[0]) continue;
+            int x = i * (W / 4) + 2, y = FOOT_Y + 3 + r * 8;
+            gfx_text(l, x, y, T->dim, 1);
+            gfx_text(v, x + gfx_text_w(l, 1) + 2, y, tk(i), 1);
+        }
+    gfx_rect(W / 4 - 1, FOOT_Y + 2, 1, 15, T->line);    /* faint column rules */
+    gfx_rect(W / 2 - 1, FOOT_Y + 2, 1, 15, T->line);
+    gfx_rect(3 * W / 4 - 1, FOOT_Y + 2, 1, 15, T->line);
 }
 
 static void knob_footer(void)
@@ -168,7 +182,7 @@ static void scr_home(uint32_t now)
     gfx_text("BAR", 128 - (gfx_text_w("BAR", 1) >> 1), 34, T->dim, 1);
     /* lane pads: lit as they trigger */
     for (int i = 0; i < LANES; i++) {
-        int x = i * 30 + 1, w = 28, y = 66, h = 30;
+        int x = i * 30 + 1, w = 28, y = 63, h = 25;
         bool lit = M.playing && (int32_t)(now - M.trig[i]) < 110 && !M.mute[i];
         if (lit) {
             gfx_rect(x, y, w, h, T->surf); gfx_dither(x, y, w, h, T->line);
@@ -245,11 +259,11 @@ static void scr_euclid(void)
 {
     char b[12];
     for (int l = 0; l < LANES; l++) {
-        int y = 11 + l * 18, ch = 15;                          /* rows of 18 px, cells 15 px tall */
+        int y = 10 + l * 16, ch = 13;                          /* rows of 16 px, cells 13 px tall */
         bool act = l == M.sel;
-        if (act) { gfx_rect(0, y + 4, 12, 7, tk(1)); gfx_text(LANE_TAG[l], 2, y + 5, T->bg, 1); }
-        else gfx_text(LANE_TAG[l], 2, y + 5, M.mute[l] ? T->line : T->dim, 1);
-        if (M.mute[l]) gfx_text("M", 14, y + 5, T->warn, 1);
+        if (act) { gfx_rect(0, y + 3, 12, 7, tk(1)); gfx_text(LANE_TAG[l], 2, y + 4, T->bg, 1); }
+        else gfx_text(LANE_TAG[l], 2, y + 4, M.mute[l] ? T->line : T->dim, 1);
+        if (M.mute[l]) gfx_text("M", 14, y + 4, T->warn, 1);
         for (int s = 0; s < 16; s++) {
             int x = 18 + s * 6;
             bool h = hit(l, s), now = M.playing && s == M.step;
@@ -258,7 +272,7 @@ static void scr_euclid(void)
             else gfx_rect(x + 2, y + ch / 2, 1, 1, T->line);
         }
         snprintf(b, sizeof b, "%d/%d", M.hits[l], M.steps[l]);
-        gfx_text(b, XR - gfx_text_w(b, 1), y + 5, act ? T->ink : T->dim, 1);
+        gfx_text(b, XR - gfx_text_w(b, 1), y + 4, act ? T->ink : T->dim, 1);
     }
     char h[6], n[6], r[6];
     int s = M.sel;
@@ -273,9 +287,9 @@ static void scr_vinyl(uint32_t now)
     /* platter: 24 dots turning at 33 1/3 rpm, the label dot in the accent; wow wobbles its speed */
     int32_t wob = M.v_wow * (int32_t)gfx_sin(now * 65536u / 1700u) / 32768;      /* +-127 */
     uint32_t ph = (uint32_t)((uint64_t)now * 65536u * 5u / 9000u) + (uint32_t)(wob * 40);   /* 33.3 rpm = 0.555 rev/s */
-    const int px = 32, py = 55;                                 /* the platter's centre */
+    const int px = 32, py = 52;                                 /* the platter's centre */
     for (int r = 0; r < 4; r++) {
-        int rad = 29 - r * 7, n = 26 - r * 5;
+        int rad = 28 - r * 7, n = 26 - r * 5;
         for (int k = 0; k < n; k++) {
             int x, y; gfx_ring_pt(px, py, rad, n, (int32_t)ph, 65536, k, &x, &y);
             bool mark = r == 0 && k == 0;
@@ -323,7 +337,7 @@ static void scr_wave(uint32_t now)
 {
     char b[24];
     /* the wave: 96 x 40 box, dotted centre line, 128 points squeezed to 96 columns */
-    const int x0 = 3, y0 = 12, bw = 82, bh = 62, cy = y0 + bh / 2;
+    const int x0 = 3, y0 = 12, bw = 82, bh = 52, cy = y0 + bh / 2;
     gfx_frame(x0 - 1, y0 - 1, bw + 2, bh + 2, T->line);
     gfx_line(x0, cy, x0 + bw - 1, cy, T->line, true);
     int py = -1;
@@ -338,12 +352,12 @@ static void scr_wave(uint32_t now)
         for (int i = 0; i < 64; i++) {
             int x = x0 + i * 5 / 4;
             bool cur = i == M.w_pos / 10;
-            gfx_rect(x, 79, 1, cur ? 7 : (i % 8 ? 2 : 4), cur ? T->accent : T->dim);
+            gfx_rect(x, 67, 1, cur ? 6 : (i % 8 ? 2 : 4), cur ? T->accent : T->dim);
         }
         snprintf(b, sizeof b, "%d.%d", M.w_pos / 10, M.w_pos % 10);
-        gfx_text(b, x0 + bw - gfx_text_w(b, 2), 89, T->accent, 2);
-        gfx_text("POS", x0, 92, T->dim, 1);
-    } else gfx_text(M.w_mode, x0, 82, T->dim, 2);
+        gfx_text(b, x0 + bw - gfx_text_w(b, 2), 76, T->accent, 2);
+        gfx_text("POS", x0, 79, T->dim, 1);
+    } else gfx_text(M.w_mode, x0, 70, T->dim, 2);
     /* right column: preset, oscillator, what plays */
     int rx = 90;
     int sc = rx + gfx_text_w(M.w_name, 2) <= W - 2 ? 2 : 1;
@@ -559,17 +573,17 @@ static void scr_play(uint32_t now)
     /* chord pads, like the lane pads on HOME: the bar's chord framed, lit while notes sound */
     int cur = M.bar & 3;
     for (int i = 0; i < 4; i++) {
-        int x = i * 37 + 1, w = 35, y = 36, h = 30;
+        int x = i * 37 + 1, w = 35, y = 34, h = 24;
         bool now_ = M.playing && i == cur, lit = now_ && M.w_held > 0 && M.p_on;
         if (lit) { gfx_rect(x, y, w, h, T->surf); gfx_dither(x, y, w, h, T->line); gfx_frame(x, y, w, h, T->accent); }
         else gfx_frame(x, y, w, h, now_ ? T->dim : T->line);
         gfx_text(CH[i], x + w / 2 - (gfx_text_w(CH[i], 2) >> 1), y + h / 2 - 4, lit ? T->accent : now_ ? T->ink : T->dim, 2);
     }
     /* the lane's Euclid pattern, cells as on EUCLID, playhead in the accent */
-    gfx_text("WV", 2, 78, M.p_on ? T->dim : T->line, 1);
-    if (!M.p_on) gfx_text("M", 12, 78, T->warn, 1);
+    gfx_text("WV", 2, 70, M.p_on ? T->dim : T->line, 1);
+    if (!M.p_on) gfx_text("M", 12, 70, T->warn, 1);
     for (int s = 0; s < 16; s++) {
-        int x = 18 + s * 6, y = 72, n = M.p_steps, k = M.p_hits;
+        int x = 18 + s * 6, y = 64, n = M.p_steps, k = M.p_hits;
         bool h = false;
         if (n > 0 && k > 0) { int i = ((s + M.p_rot) % n + n) % n; h = (i * k) % n < k; }
         bool here = M.playing && s == M.step;
@@ -578,7 +592,7 @@ static void scr_play(uint32_t now)
         else gfx_rect(x + 2, y + 8, 1, 1, T->line);
     }
     snprintf(b, sizeof b, "%d/%d", M.p_hits, M.p_steps);
-    gfx_text(b, XR - gfx_text_w(b, 1), 78, T->dim, 1);
+    gfx_text(b, XR - gfx_text_w(b, 1), 70, T->dim, 1);
     char o[8], g[8], v[8];
     snprintf(o, sizeof o, "%+d", M.p_oct); snprintf(g, sizeof g, "%d.%d", M.e_gate10 / 10, M.e_gate10 % 10);
     snprintf(v, sizeof v, "%+d", M.p_vol / 10);
@@ -688,7 +702,7 @@ static void scr_matrix(void)
 {
     mod_head();
     if (M.mx_n == 0) { gfx_text("NO SLOT IN USE", 4, 60, T->dim, 1); mod_foot(); return; }
-    for (int r = 0; r < M.mx_n && r < 7; r++) {
+    for (int r = 0; r < M.mx_n && r < 6; r++) {
         int y = GT + 3 + r * 8, d = r > M.mx_focus ? r - M.mx_focus : M.mx_focus - r;
         uint16_t col = d == 0 ? T->ink : d <= 2 ? T->dim : T->line;
         gfx_text(M.mx_txt[r], 4, y - 2, col, 1);
@@ -708,12 +722,75 @@ static void scr_matrix(void)
     mod_foot();
 }
 
+/* SAMPLER: the whole sample as an LED waveform (a dotted bar every 2 px, mirrored around the centre); the region
+ * START..END lit, the rest faint; in SLICE mode the slice edges dotted and the slice last hit bright; each playing
+ * voice a line in the accent. Under it the sampler's Euclidean lane, as on PLAY. Armed / recording: the bar count
+ * and the record progress over the waveform. */
+static void scr_sampler(uint32_t now)
+{
+    mod_head();
+    const int x0 = 2, cols = W - 4, top = GT, bot = GB - 14, mid = (top + bot) / 2, half = (bot - top) / 2;
+    int xs = x0 + M.s_start * (cols - 1) / 1000, xe = x0 + M.s_end * (cols - 1) / 1000;
+    if (xe < xs) { int t = xs; xs = xe; xe = t; }
+    int n = M.s_nb < 1 ? 1 : M.s_nb;
+    #define BX(i) (x0 + M.s_b[i] * (cols - 1) / 1000)
+    if (M.s_nb >= 1) { xs = BX(0); xe = BX(n); }
+    int ls = M.s_mode == 1 && M.s_last >= 0 ? M.s_last % n : -1;
+    int la = xs, lb = xe;                                       /* the bright span */
+    if (ls >= 0 && M.s_nb >= 1) { la = BX(ls); lb = BX(ls + 1); }
+    if (M.s_rec != 2 && M.s_len > 0) {
+        for (int x = x0; x < x0 + cols; x += 2) {
+            int h = M.s_ov[x - x0] * half / 255;
+            bool in = x >= xs && x <= xe, br = in && x >= la && x <= lb;
+            uint16_t col = !in ? T->line : br ? T->ink : T->dim;
+            gfx_px(x, mid, in ? T->dim : T->line);
+            for (int y = 2; y <= h; y += 2) { gfx_px(x, mid - y, col); gfx_px(x, mid + y, col); }
+        }
+        if (M.s_mode == 1)
+            for (int k = 1; k < n; k++) {                       /* slice edges: dotted, a tick on top */
+                int x = M.s_nb >= 1 ? BX(k) : xs + (xe - xs) * k / n;
+                for (int y = top + 3; y <= bot; y += 4) gfx_px(x, y, T->line);
+                gfx_rect(x, top, 1, 2, k == ls || k == ls + 1 ? T->ink : T->dim);
+            }
+        /* region edges: a bar with a flag, in the second colour */
+        gfx_line(xs, top, xs, bot, tk(1), true); gfx_rect(xs, top, 3, 2, tk(1));
+        gfx_line(xe, top, xe, bot, tk(1), true); gfx_rect(xe - 2, top, 3, 2, tk(1));
+        for (int v = 0; v < 4; v++)
+            if (M.s_pos[v] >= 0) { int x = x0 + M.s_pos[v] * (cols - 1) / 1000; gfx_rect(x, top, 1, bot - top + 1, T->accent); }
+    } else if (M.s_rec != 2) gfx_text(M.s_len < 0 ? "PRESS PLAY" : "EMPTY - LOAD OR RESAMPLE", 4, mid - 2, T->dim, 1);
+    if (M.s_rec == 1) {                                         /* armed: waits for the downbeat */
+        if ((now / 250) & 1) { gfx_rect(W / 2 - 22, mid - 6, 44, 13, T->bg); gfx_frame(W / 2 - 22, mid - 6, 44, 13, T->warn); gfx_text("ARMED", W / 2 - 9, mid - 2, T->warn, 1); }
+    } else if (M.s_rec == 2) {                                  /* recording: progress as LEDs */
+        gfx_text("RESAMPLING", 4, top + 2, T->accent, 1);
+        int lit = M.s_prog * (cols / 4) / 1000;
+        for (int i = 0; i < cols / 4; i++) gfx_rect(x0 + i * 4, mid - 3, 3, 7, i < lit ? T->accent : T->line);
+        if ((now / 300) & 1) gfx_rect(W - 9, top + 2, 5, 5, T->accent);
+    }
+    /* its lane */
+    int ly = GB - 9;
+    gfx_text("SM", 2, ly + 2, M.s_on ? T->dim : T->line, 1);
+    if (!M.s_on) gfx_text("M", 12, ly + 2, T->warn, 1);
+    for (int s = 0; s < 16; s++) {
+        int x = 18 + s * 6, nn = M.s_steps, k = M.s_hits;
+        bool h = false;
+        if (nn > 0 && k > 0) { int i = ((s + M.s_rot) % nn + nn) % nn; h = (i * k) % nn < k; }
+        bool here = M.playing && s == M.step;
+        if (h) gfx_rect(x, ly, 5, 9, here ? T->accent : M.s_on ? T->ink : T->line);
+        else if (here) gfx_frame(x, ly, 5, 9, T->accent);
+        else gfx_rect(x + 2, ly + 4, 1, 1, T->line);
+    }
+    char b[12];
+    snprintf(b, sizeof b, "%d/%d", M.s_hits, M.s_steps);
+    gfx_text(b, XR - gfx_text_w(b, 1), ly + 2, T->dim, 1);
+    mod_foot();
+}
+
 /* ---------------------------------------------------------------- splash: a terminal boot log
  * Lines type on at the cursor (a blinking block in the accent), OK tags in the third colour, the prompt in
  * the accent; the log scrolls once it fills the screen, then the first page appears. */
-enum { TERM_MS = 4110, TERM_CPS = 100 };     /* total time, characters typed per second */
+enum { TERM_MS = 4300, TERM_CPS = 100 };     /* total time, characters typed per second */
 static const char *const TERM[] = {
-    "OPEN-MPK4 MONITOR 0.4 / FILTER LAB",
+    "PYOKO",                                   /* line 0: 2x, then the name in kana */
     "",
     "> MEM 4096K ............... OK",
     "> GFX 600X450 AMOLED X4 ... OK",
@@ -723,11 +800,29 @@ static const char *const TERM[] = {
     "> MARBLES  TIDES  BEADS ... OK",
     "> SP-303 VINYL MR2 ........ OK",
     "> EUCLID 5 + WAVE 1 ....... OK",
+    "> SAMPLER  RAM ............ OK",
     "",
     "READY.",
     "> ",
 };
 enum { TERM_N = sizeof(TERM) / sizeof(TERM[0]) };
+/* ぴょこ (pyoko) as 9 x 9 pixel kana, one row per uint16 (bit 8 = left); the small yo sits low and narrow */
+static const uint16_t KANA[3][9] = {
+    { 0x002, 0x1C5, 0x04A, 0x08C, 0x08A, 0x109, 0x110, 0x110, 0x0E0 },   /* ぴ */
+    { 0x000, 0x000, 0x000, 0x040, 0x070, 0x040, 0x070, 0x0D0, 0x0E8 },   /* ょ */
+    { 0x0FC, 0x004, 0x000, 0x000, 0x000, 0x100, 0x100, 0x0FE, 0x000 },   /* こ */
+};
+static const uint8_t KANA_W[3] = { 9, 6, 8 };
+static int kana(int x, int y, uint16_t col)
+{
+    for (int g = 0; g < 3; g++) {
+        for (int r = 0; r < 9; r++)
+            for (int b = 0; b < 9; b++)
+                if (KANA[g][r] >> (8 - b) & 1) gfx_px(x + b, y + r, col);
+        x += KANA_W[g] + 2;
+    }
+    return x;
+}
 static void scr_term(uint32_t bt)
 {
     gfx_rect(0, 0, W, H, T->bg);
@@ -750,7 +845,7 @@ static void scr_term(uint32_t bt)
         for (int i = 0; i < n; i++) {
             char ch[2] = { s[i], 0 };
             uint16_t c = T->ink;
-            if (l == 0) c = T->ink;
+            if (l == 0) { x = gfx_text(ch, x, y, T->ink, 2); continue; }
             else if (s[0] == '>' && i == 0) c = T->accent;
             else if (i >= 2 && s[i - 1] == ' ' && s[i] == 'O' && s[i + 1] == 'K') c = tk(2);
             else if (i >= 1 && s[i - 1] == 'O' && s[i] == 'K') c = tk(2);
@@ -758,6 +853,7 @@ static void scr_term(uint32_t bt)
             else if (s[0] == '>') c = T->dim;
             x = gfx_text(ch, x, y, c, 1);
         }
+        if (l == 0 && l < line) x = kana(x + 6, y + 1, T->accent);   /* the name, once typed */
         cx = x; cy = y;
     }
     /* the cursor: a 4x5 block, blinking at 3 Hz (solid while typing) */
@@ -845,7 +941,7 @@ API void scr_init(void)
     memset(&M, 0, sizeof M);
     M.theme_drawn = -1; M.bpm = 120; M.nfilt = 1; M.bars_per = 4; M.sweep = 1; M.res = 65; M.env = 100;
     M.fc = 440; M.boot_on = 1; M.sel = 1; M.v_on = 1; M.v_comp = 64; M.p_on = 1; M.p_steps = 16; M.e_focus = 1;
-    strcpy(M.fam, "FILTER LAB");
+    strcpy(M.fam, "PYOKO");
     for (int i = 0; i < LANES; i++) { M.steps[i] = 16; M.hits[i] = 4; }
 }
 API uint16_t *scr_fb(void) { return fb; }
@@ -861,6 +957,23 @@ API uint8_t *scr_wspec(void) { return M.w_spec; }
 API uint8_t *scr_resp(int i) { return M.resp[i & 1]; }
 API void scr_wlane(int n, int k, int r) { M.p_steps = n; M.p_hits = k; M.p_rot = r; }
 /* module screens: text slots 0 title, 1 subtitle, 2..5 footer labels, 6..9 footer values (from sbuf) */
+API uint8_t *scr_smp_ov(void) { return M.s_ov; }
+API int scr_smp_cols(void) { return W - 4; }
+API void scr_smp_state(int len, int start, int end, int slices, int mode, int last, int rec, int prog)
+{ M.s_len = len; M.s_start = start; M.s_end = end; M.s_slices = slices; M.s_mode = mode; M.s_last = last; M.s_rec = rec; M.s_prog = prog; }
+API void scr_smp_pos(int a, int b, int c, int d) { M.s_pos[0] = a; M.s_pos[1] = b; M.s_pos[2] = c; M.s_pos[3] = d; }
+API int16_t *scr_smp_bounds(int n) { M.s_nb = n < 0 ? 0 : (n > 16 ? 16 : n); return M.s_b; }
+API void scr_smp_lane(int n, int k, int r, int on) { M.s_steps = n; M.s_hits = k; M.s_rot = r; M.s_on = on; }
+/* one footer cell: sbuf = "LABEL|VALUE" */
+API void scr_foot(int i)
+{
+    if (i < 0 || i > 7) return;
+    const char *bar = strchr(sbuf, '|');
+    size_t nl = bar ? (size_t)(bar - sbuf) : strlen(sbuf);
+    if (nl > 5) nl = 5;
+    memcpy(M.f_l[i], sbuf, nl); M.f_l[i][nl] = 0;
+    strncpy(M.f_v[i], bar ? bar + 1 : "", 7); M.f_v[i][7] = 0;
+}
 API void scr_mtext(int slot)
 {
     char *d = slot == 0 ? M.m_title : slot == 1 ? M.m_sub : slot < 6 ? M.m_fl[slot - 2] : M.m_fv[(slot - 6) & 3];
@@ -1003,6 +1116,7 @@ API int scr_frame(uint32_t now)
         case SCR_FL_MARBLES: scr_marbles(); break;
         case SCR_FL_BEADS: scr_beads(now); break;
         case SCR_FL_MATRIX: scr_matrix(); break;
+        case SCR_FL_SAMPLER: scr_sampler(now); break;
         default: scr_wave(now); break;
         }
         status(now);

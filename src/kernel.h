@@ -14,6 +14,7 @@
 #include <circle/sound/i2ssoundbasedevice.h>
 #include <circle/types.h>
 #include "filterlab.h"
+#include "sampler.h"
 #include "config.h"
 
 enum TShutdownMode
@@ -58,6 +59,8 @@ private:
 #endif
 
 	FilterLab		m_Lab;
+	Sampler			m_Sampler;
+	int			m_nLastStep, m_nLastBar;
 	int			m_nEditLane;
 	u64			m_nBusyTicks;
 	unsigned		m_nLedOffAt;

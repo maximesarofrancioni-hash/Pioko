@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Filter lab</title>
+<title>Pyoko ぴょこ</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&family=Barlow:wght@400;600&display=swap" rel="stylesheet">
 <style>
@@ -35,6 +35,11 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid 
 #play i{width:12px;height:12px;border-radius:50%;background:#555;box-shadow:inset 0 1px 2px #000}
 #play.on i{background:var(--led);box-shadow:0 0 10px var(--led)}
 .disp{margin:18px auto 0;max-width:632px}
+.panel{max-width:632px;margin:8px auto 0;display:grid;gap:4px}
+.prow{background:light-dark(#d9dbde,#202327);border-radius:10px;padding:6px 8px 4px}
+.plbl{display:block;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);padding-left:2px}
+.pk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}.pk .enc svg{max-width:64px}.pk .enc output{font-size:14px}.pk .enc .legend{font-size:13px}
+.pk .nil{min-height:40px}
 .bezel{background:#0b0c0d;border-radius:10px;padding:clamp(8px,1.6vw,16px);box-shadow:inset 0 2px 10px #000,0 1px 0 light-dark(#fff,#3a3e44)}
 canvas#scr{display:block;margin:0 auto;width:100%;aspect-ratio:150/112;image-rendering:pixelated;image-rendering:crisp-edges;border-radius:3px}
 .dctl{display:flex;flex-direction:column;gap:8px}
@@ -114,7 +119,10 @@ canvas#scr{display:block;margin:0 auto;width:100%;aspect-ratio:150/112;image-ren
 .slot .enc .legend{display:none}.slot .enc output{min-width:80px;text-align:left}
 .usewave.on{background:var(--ink);color:var(--plate)}
 .wpat{display:flex;gap:3px;flex:1 1 200px}.wpat i{flex:1;height:18px;border-radius:3px;background:var(--line)}
-.wpat i.h{background:#c48bff}.wpat i.cur{outline:2px solid var(--ink);outline-offset:1px}
+.wpat i.h{background:#c48bff}.spat i.h{background:#3fa9f5}
+.spads{display:grid;grid-template-columns:repeat(16,minmax(0,1fr));gap:4px;margin-top:10px}.spads button{min-height:40px;padding:0;font-size:13px}.spads button.hot{background:var(--led);color:#000}
+@media(max-width:600px){.spads{grid-template-columns:repeat(8,minmax(0,1fr))}}
+section.drag{outline:3px dashed var(--led);outline-offset:4px}.wpat i.cur{outline:2px solid var(--ink);outline-offset:1px}
 @media(max-width:760px){.slot{grid-template-columns:34px minmax(0,1fr) minmax(0,1fr) 44px;gap:6px;padding:4px 2px}.slot .ar{display:none}.slot .enc{flex-direction:column;gap:0}.slot .enc output{min-width:0;font-size:13px;text-align:center}.slot select{font-size:14px;padding:0 6px}.slot .enc svg{width:44px}.wgrid,.wgrid.three{grid-template-columns:1fr}.routes{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.tabs{gap:4px}.tabs button{flex:1;padding:0 6px;font-size:17px}}
 .note{color:var(--mute);font-size:14px;margin:14px 0 0;max-width:70ch}
@@ -147,18 +155,23 @@ canvas#scr{display:block;margin:0 auto;width:100%;aspect-ratio:150/112;image-ren
 <body>
 <div class="plate">
  <header>
-  <h1>Filter lab<small>sst-filters · osc440 · Marbles · Tides · Beads · SP-303 Vinyl Sim</small></h1>
+  <h1>Pyoko <span lang="ja">ぴょこ</span><small>sst-filters · osc440 · sampler · Marbles · Tides · Beads · SP-303 Vinyl Sim</small></h1>
   <button id="play" aria-pressed="false"><i></i><span>Play</span></button>
  </header>
 
  <div class="disp">
   <div class="bezel"><canvas id="scr" width="150" height="112" role="img" aria-label="600 x 450 AMOLED display"></canvas></div>
  </div>
+ <div class="panel" aria-label="Encoders">
+  <div class="prow"><span class="plbl">Front panel · line 1</span><div class="pk" id="pk0"></div></div>
+  <div class="prow"><span class="plbl">Under the screen · line 2</span><div class="pk" id="pk1"></div></div>
+ </div>
 
  <nav class="keys" id="keys" aria-label="Pages">
   <div class="kg"><span class="kgl"><span class="lf">FILTER LAB</span><span class="ls">FILTER</span></span><div class="kgk"><button class="key on" data-k="model" aria-pressed="true"><b><i></i></b><span class="lf">FILTER</span><span class="ls">FLT</span></button><button class="key" data-k="eucl" aria-pressed="false"><b><i></i></b><span class="lf">EUCLID</span><span class="ls">EUC</span></button></div></div>
   <div class="kg"><span class="kgl"><span class="lf">SEQUENCE</span><span class="ls">SEQ</span></span><div class="kgk"><button class="key" data-k="shift" aria-pressed="false"><b><i></i></b><span class="lf">SHIFT</span><span class="ls">SHF</span></button><button class="key" data-k="marbles" aria-pressed="false"><b><i></i></b><span class="lf">MARBLES</span><span class="ls">MRB</span></button></div></div>
   <div class="kg"><span class="kgl"><span class="lf">WAVETABLE</span><span class="ls">WAVE</span></span><div class="kgk"><button class="key" data-k="play" aria-pressed="false"><b><i></i></b><span class="lf">PLAY</span><span class="ls">PLY</span></button><button class="key" data-k="osc" aria-pressed="false"><b><i></i></b><span class="lf">OSC</span><span class="ls">OSC</span></button><button class="key" data-k="env" aria-pressed="false"><b><i></i></b><span class="lf">ENV</span><span class="ls">ENV</span></button></div></div>
+  <div class="kg"><span class="kgl"><span class="lf">SAMPLER</span><span class="ls">SMP</span></span><div class="kgk"><button class="key" data-k="sampler" aria-pressed="false"><b><i></i></b><span class="lf">SAMPLER</span><span class="ls">SMP</span></button></div></div>
   <div class="kg"><span class="kgl"><span class="lf">MOD</span><span class="ls">MOD</span></span><div class="kgk"><button class="key" data-k="tides" aria-pressed="false"><b><i></i></b><span class="lf">TIDES</span><span class="ls">TDS</span></button><button class="key" data-k="matrix" aria-pressed="false"><b><i></i></b><span class="lf">MATRIX</span><span class="ls">MTX</span></button></div></div>
   <div class="kg"><span class="kgl"><span class="lf">FX</span><span class="ls">FX</span></span><div class="kgk"><button class="key" data-k="beads" aria-pressed="false"><b><i></i></b><span class="lf">BEADS</span><span class="ls">BDS</span></button><button class="key" data-k="vinyl" aria-pressed="false"><b><i></i></b><span class="lf">VINYL</span><span class="ls">VNL</span></button></div></div>
  </nav>
@@ -240,6 +253,32 @@ canvas#scr{display:block;margin:0 auto;width:100%;aspect-ratio:150/112;image-ren
   <p class="note">Mutable Instruments Marbles (T and X sections), clocked by the 16ths. T1 plays X1 and T3 plays X3 on the wave lane; Déjà vu loops both.</p>
  </section>
 
+ <section class="sec" id="s-sampler" hidden>
+  <div class="wgrid one"><div class="wsec"><h3>Sampler<span class="sp"></span><span class="legend" id="sinfo"></span></h3>
+   <div class="vrow">
+    <button id="son" aria-pressed="true">Sampler on</button>
+    <button id="sload">Load sample…</button><input type="file" id="sfile" accept="audio/*" hidden>
+    <button id="sdemo">Demo break</button>
+    <span class="legend">Resample</span><span class="seg" id="sarm"><button data-v="1">1 bar</button><button data-v="2">2 bars</button><button data-v="4">4 bars</button></span>
+   </div>
+   <div class="vrow">
+    <span class="legend">Mode</span><span class="seg" id="smode"><button data-v="0">One shot</button><button data-v="1" class="on">Slice</button></span>
+    <span class="legend">Slices</span><span class="seg" id="sslices"><button data-v="4">4</button><button data-v="8">8</button><button data-v="16">16</button><button data-v="0" class="on">Auto</button></span>
+    <span class="legend">Order</span><span class="seg" id="sorder"><button data-v="0" class="on">Step</button><button data-v="1">Random</button></span>
+    <button id="srev" aria-pressed="false">Reverse</button>
+    <span class="legend">Pitch</span><span class="seg" id="spmode"><button data-v="0">Varispeed</button><button data-v="1" class="on">Keep time</button></span>
+   </div>
+   <div class="vrow">
+    <div class="stepw"><span class="legend">Hits</span><div class="step"><button data-s="hits" data-d="-1" aria-label="Hits down">−</button><span id="shits">12</span><button data-s="hits" data-d="1" aria-label="Hits up">+</button></div></div>
+    <div class="stepw"><span class="legend">Steps</span><div class="step"><button data-s="steps" data-d="-1" aria-label="Steps down">−</button><span id="ssteps">16</span><button data-s="steps" data-d="1" aria-label="Steps up">+</button></div></div>
+    <div class="stepw"><span class="legend">Rotate</span><div class="step"><button data-s="rot" data-d="-1" aria-label="Rotate down">−</button><span id="srot">0</span><button data-s="rot" data-d="1" aria-label="Rotate up">+</button></div></div>
+    <div class="wpat spat" id="spat"></div>
+   </div>
+   <div class="knobs" id="sk"></div>
+   <div class="spads" id="spads" aria-label="Audition slices"></div></div></div>
+  <p class="note">A simple sampler: one mono sample in RAM, on its own Euclidean lane. Slice cuts the Start–End region into equal slices, or at its hits (Auto: onset detection, Auto sens sets how many). Each hit plays the slice under its step (the region spread over the bars it lasts) or a random one, cutting off the previous one; a hit inside the slice already playing lets it run. Varispeed changes pitch and length together like tape; Keep time shifts the pitch and keeps the length (40 ms grains). One shot plays the whole region. Resample records the filter lab and wave lane mix from the next downbeat. Pads audition slices. Load any audio file the browser can decode (or drop one on this page): it is mixed to mono and resampled to 44.1 kHz, up to 47 s here. On the Pi the sample memory is a static array in RAM, sized to taste.</p>
+ </section>
+
  <section class="sec" id="s-tides" hidden>
   <div class="wgrid one"><div class="wsec"><h3>Tides</h3>
    <div class="vrow"><span class="legend">Ramp</span><span class="seg" id="tdramp"><button data-v="0">AD</button><button data-v="1" class="on">Looping</button><button data-v="2">AR</button></span>
@@ -276,7 +315,7 @@ canvas#scr{display:block;margin:0 auto;width:100%;aspect-ratio:150/112;image-ren
  <div class="bottom">
   <div class="thm"><span class="legend">Display theme</span><button id="theme">EMBER</button></div>
   <p class="foot"><span id="msg"></span> The page keys pick the screen; press FILTER again to switch between the FILTER and HOME screens.
-   Display: open-mpk4 firmware <code>gfx.c</code> + boot with filter-lab screens. Sound: filter-lab C++ engine, osc440, and Mutable Instruments Marbles, Tides 2 and Beads (MIT, unmodified) in WebAssembly, then the SP-303 Vinyl Sim. Use headphones: bass goes down to 55 Hz.</p>
+   Display: open-mpk4 firmware <code>gfx.c</code> + boot with Pyoko's screens. Sound: filter-lab C++ engine, osc440, and Mutable Instruments Marbles, Tides 2 and Beads (MIT, unmodified) in WebAssembly, then the SP-303 Vinyl Sim. Use headphones: bass goes down to 55 Hz.</p>
  </div>
 </div>
 
@@ -288,6 +327,7 @@ class FL extends AudioWorkletProcessor{
  constructor(){super();this.e=null;this.q=[];this.pos=32;this.last=-1;this.n=0;this.watch=0;this.port.onmessage=m=>this.msg(m.data);
   this.v=new VinylMR2(VDATA);this.vc={on:1,comp:64,noise:0,wow:0,mode:'firmware',gin:1,gout:1};this.vapply();
   this.iL=new Int32Array(128);this.iR=new Int32Array(128);this.oL=new Int32Array(128);this.oR=new Int32Array(128)}
+ sov(){const e=this.e;this.port.postMessage({t:'sov',len:new Float32Array(e.memory.buffer,e.fl_smp_info(),10)[7],ov:Array.from(new Uint8Array(e.memory.buffer,e.fl_smp_overview(146),146))})}
  vapply(){const c=this.vc;this.v.setKnobsAll(c.comp,c.noise,c.wow);this.v.setCompMode(c.mode)}
  msg(d){
   if(d.t==='wpre'){if(!this.e){this.q.push(d);return}const b=new Float32Array(this.e.memory.buffer,this.e.fl_wbuf(),512);d.p.forEach((x,i)=>{b[2*i]=x[0];b[2*i+1]=x[1]});this.e.fl_wave_preset(d.p.length);return}
@@ -301,13 +341,16 @@ class FL extends AudioWorkletProcessor{
     this.WL=new Float32Array(e.memory.buffer,e.fl_wleft(),32);
     const m=new Uint8Array(e.memory.buffer),names=[];
     for(let i=0;i<e.fl_num_filters();i++){let p=e.fl_filter_name(i),s='';while(m[p])s+=String.fromCharCode(m[p++]);names.push(s)}
-    this.e=e;this.port.postMessage({t:'names',names});
+    this.e=e;this.port.postMessage({t:'names',names});this.sov();
     const q=this.q;this.q=[];q.forEach(x=>this.msg(x));
    }).catch(err=>this.port.postMessage({t:'err',m:String(err)}));
    return}
   if(!this.e){this.q.push(d);return}
   const e=this.e;
   if(d.t==='mod')e.fl_mod_set(d.g,d.k,d.v);
+  if(d.t==='sset')e.fl_smp_set(d.k,d.v);else if(d.t==='sarm')e.fl_smp_arm(d.b);else if(d.t==='strig')e.fl_smp_trigger(d.i);
+  else if(d.t==='sdemo'){e.fl_smp_demo();this.sov()}
+  else if(d.t==='sload'){const cap=e.fl_smp_cap(),n=Math.min(cap,d.pcm.length);new Float32Array(e.memory.buffer,e.fl_smp_ram(),cap).set(d.pcm.subarray(0,n));e.fl_smp_loaded(n);this.sov()}
   if(d.t==='wset')e.fl_wave_set(d.id,d.v);else if(d.t==='wcfg')e.fl_wave_cfg(d.k,d.v);else if(d.t==='weuc')e.fl_wave_euclid(d.n,d.k,d.r);
   if(d.t==='set')e.fl_set(d.id,d.v);else if(d.t==='sel')e.fl_select(d.i);else if(d.t==='euc')e.fl_euclid(d.lane,d.n,d.k,d.r);
  }
@@ -327,6 +370,7 @@ class FL extends AudioWorkletProcessor{
   if(this.e.fl_changed())this.port.postMessage({t:'filt',i:this.e.fl_filter()});
   if(++this.n%8===0){this.port.postMessage({t:'cut',v:this.e.fl_cutoff()});
    this.port.postMessage({t:'mods',a:Array.from(new Float32Array(this.e.memory.buffer,this.e.fl_mod_info(),30))});
+   {const si=Array.from(new Float32Array(this.e.memory.buffer,this.e.fl_smp_info(),28));this.port.postMessage({t:'smp',a:si});if(si[9])this.sov()}
    const e=this.e,o=this.watch|0,lv=new Float32Array(e.memory.buffer,e.fl_wave_live(),11),pos=lv[o],pw=lv[3+o];
    const mode=e.fl_wave_get(100+o*16),tab=e.fl_wave_get(101+o*16);
    this.port.postMessage({t:'wlive',o,pos,pw,act:lv[6],e1:lv[7],e2:lv[8],e3:lv[10],lph:lv[9],pts:mode===0?Array.from(new Float32Array(e.memory.buffer,e.fl_wave_points(tab,pos),128)):null})}
@@ -362,6 +406,7 @@ const LEDP=Array.from({length:NLED},(_,i)=>{const a=A0+(A1-A0)*i/(NLED-1);return
 const arc=(a,b,r)=>`M${50+r*Math.sin(a)} ${50-r*Math.cos(a)} A${r} ${r} 0 1 1 ${50+r*Math.sin(b)} ${50-r*Math.cos(b)}`;
 const knobDef={res:.65,cut:0,env:1,drv:0,bpm:120};
 function encoder(host,k,onv){
+ k.onv=onv;
  const d=document.createElement('div');d.className='enc';d.tabIndex=0;d.id='k-'+k.k;
  d.setAttribute('role','slider');d.setAttribute('aria-label',k.l);d.setAttribute('aria-valuemin',k.min);d.setAttribute('aria-valuemax',k.max);
  const c=(r,cls,op)=>LEDP.map(([x,y])=>`<circle ${cls?`class="${cls}"`:''} cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${r}" ${op?'opacity="0"':''}/>`).join('');
@@ -451,7 +496,7 @@ const gunzip=async b64=>{const bin=atob(b64),gz=new Uint8Array(bin.length);for(l
 function scrLanes(){if(!sc)return;lanes.forEach((L,i)=>sc.e.scr_lane(i,L.steps,L.hits,L.rot,i<4&&mute[i]?1:0))}
 function splitName(n){const m=n.match(/^(.*?)\s+(?:-\s+|\()(.*?)\)?$/);return (m?[m[1],m[2]]:[n,'']).map(x=>x.toUpperCase())}
 function scrModel(i,pop){if(!sc||!names[i])return;setTimeout(respFilter,0);const [f,v]=splitName(names[i]);sc.str(0,f);sc.str(1,v);sc.set(SS.filter,i);sc.set(SS.nfilt,names.length);if(pop)sc.set(SS.popm,0)}
-function setScreen(i){scrN=i;sc&&sc.set(SS.screen,i);scrMods();if(i===12&&typeof scrMatrix==='function')scrMatrix();if(i===1){respFilter();respWave()}}
+function setScreen(i){scrN=i;sc&&sc.set(SS.screen,i);scrMods();if(i===13&&typeof scrSampler==='function')scrSampler();if(i===12&&typeof scrMatrix==='function')scrMatrix();if(i===1){respFilter();respWave()}}
 
 $('theme').addEventListener('click',()=>{if(!sc)return;themeN=(themeN+1)%sc.e.scr_n_themes();sc.set(SS.theme,themeN);$('theme').textContent=sc.cstr(sc.e.scr_theme_name(themeN))});
 (async()=>{
@@ -511,9 +556,9 @@ $('von').addEventListener('click',()=>{vst.on=!vst.on;$('von').textContent='Viny
 $('vmode').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;vst.mode=b.dataset.m;
  $('vmode').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));sendVinyl();scrVinyl()});
 // page keys: one section shown at a time; the display follows
-const SECSCR={matrix:12,model:1,eucl:2,shift:9,marbles:10,play:8,osc:4,env:5,tides:6,beads:11,vinyl:3};
+const SECSCR={sampler:13,matrix:12,model:1,eucl:2,shift:9,marbles:10,play:8,osc:4,env:5,tides:6,beads:11,vinyl:3};
 let curSec='model';
-function showSec(k,noScreen){curSec=k;
+function showSec(k,noScreen){curSec=k;if(typeof buildPanel==='function')buildPanel(k);
  document.querySelectorAll('#keys .key').forEach(b=>{const on=b.dataset.k===k;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});
  document.querySelectorAll('section.sec').forEach(x=>x.hidden=x.id!=='s-'+k);
  if(!noScreen&&scrN!==SECSCR[k]&&!(k==='model'&&scrN===0))setScreen(SECSCR[k])}
@@ -675,8 +720,8 @@ function mxUI(keepKnobs){let n=0;
  $('mxcount').textContent=n+' of 15 in use';scrMatrix()}
 function scrMatrix(){if(!sc||scrN!==12)return;
  const act=[];for(let s=0;s<15;s++)if((wv[400+s*3]|0)>0)act.push(s);
- // up to 7 rows around the slot in focus
- let fi=act.indexOf(mxFocus);const start=Math.max(0,Math.min(act.length-7,(fi<0?0:fi)-3)),rows=act.slice(start,start+7);
+ // up to 6 rows around the slot in focus
+ let fi=act.indexOf(mxFocus);const start=Math.max(0,Math.min(act.length-6,(fi<0?0:fi)-2)),rows=act.slice(start,start+6);
  rows.forEach((s,r)=>{const d=MXD[wv[401+s*3]|0];const m=new Uint8Array(sc.e.memory.buffer,sc.e.scr_buf(),96);m.fill(0);
   const t=(s+1)+' '+MXS[wv[400+s*3]|0][1]+'>'+d[1];for(let i=0;i<t.length;i++)m[i]=t.charCodeAt(i);
   sc.e.scr_mx_row(r,Math.round(Math.max(-1,Math.min(1,wv[402+s*3]/d[2]))*1000))});
@@ -693,7 +738,7 @@ const e3={d:1,a:.3};
 $('e3dest').innerHTML=E3D.map((d,i)=>`<option value="${i}"${i===e3.d?' selected':''}>${d[0]}</option>`).join('');
 function sendE3(){const d=E3D[e3.d];wsetv(445,d[1]<0?0:7);if(d[1]>=0)wsetv(446,d[1]);wsetv(447,d[1]<0?0:e3.a*d[2]);scrWave()}
 $('e3dest').addEventListener('change',()=>{e3.d=+$('e3dest').value;envFocus(2);sendE3()});
-encoder($('e3amt'),{k:'e3a',l:'Amount',bi:1,min:-1,max:1,st:.01,v:e3.a,d:0,f:v=>sgn(Math.round(v*100),'%')},k=>{e3.a=k.v;sendE3()});
+const e3K=encoder($('e3amt'),{k:'e3a',l:'Amount',bi:1,min:-1,max:1,st:.01,v:e3.a,d:0,f:v=>sgn(Math.round(v*100),'%')},k=>{e3.a=k.v;sendE3()});
 
 // ENV / LFO / W FILTER screens
 const LSH=['SINE','TRI','SAW','SAW DN','SQUARE','PULSE','S&H','SMOOTH','EXP','STEPS'];
@@ -750,10 +795,11 @@ Object.keys(MSEG).forEach(id=>$(id).addEventListener('click',e=>{const b=e.targe
 document.querySelectorAll('.usewave').forEach(b=>b.addEventListener('click',()=>setWMode(wl.mode===+b.dataset.m?0:+b.dataset.m)));
 // Tides routing
 const DESTS=['Off','Osc 1 wave','Osc 2 wave','Osc 3 wave','Ladder cut','SVF cut','SVF morph','Osc 1 PW','Filter lab cut','Beads time','Beads size','Beads pitch','Beads density'];
+const routeK=[];
 const route=[{d:1,a:.5},{d:4,a:.3},{d:0,a:.5},{d:0,a:.5}];
 $('routes').innerHTML=route.map((r,i)=>`<div class="route"><span class="legend">Out ${i+1}</span><select id="rd${i}" aria-label="Tides output ${i+1} destination">${DESTS.map((n,j)=>`<option value="${j}"${j===r.d?' selected':''}>${n}</option>`).join('')}</select><div class="rk" id="rk${i}"></div></div>`).join('');
 route.forEach((r,i)=>{$('rd'+i).addEventListener('change',()=>{r.d=+$('rd'+i).value;msend(4,i,r.d);scrMods()});
- encoder($('rk'+i),{k:'ra'+i,l:'Amount',bi:1,min:-1,max:1,st:.01,v:r.a,d:0,f:v=>sgn(Math.round(v*100),'%')},k=>{r.a=k.v;msend(5,i,k.v)})});
+ routeK[i]=encoder($('rk'+i),{k:'ra'+i,l:'Amount',bi:1,min:-1,max:1,st:.01,v:r.a,d:0,f:v=>sgn(Math.round(v*100),'%')},k=>{r.a=k.v;msend(5,i,k.v)})});
 // Beads buttons
 const bst={on:true,freeze:false};
 $('bon').addEventListener('click',()=>{bst.on=!bst.on;$('bon').textContent='Beads '+(bst.on?'on':'bypassed');$('bon').setAttribute('aria-pressed',bst.on);msend(3,0,bst.on?1:0);scrMods()});
@@ -782,6 +828,82 @@ function modsInfo(a){lastMods=a;if(!sc)return;
   sc.e.scr_beads_state(Math.round(MKV('beads',1)*100),Math.round(MKV('beads',2)*100),Math.round(MKV('beads',5)*100),Math.round((MKV('beads',4)+24)/48*100),bst.freeze?1:0,lv(a[28]),bst.on?lv(a[29]):0)}}
 function marblesStep(mb){if(!sc)return;const r=[2,5,10][MSEG.mbrange[2]],lo=MSEG.mbrange[2]===2?-5:0,n=v=>Math.max(0,Math.min(255,Math.round((v-lo)/r*255)));
  sc.e.scr_marbles_push((mb[0]?1:0)|(mb[1]?2:0),n(mb[2]),n(mb[3]))}
+
+// ---- sampler
+const SR=44100;
+const ss={on:1,mode:1,slices:16,auto:1,pmode:1,nb:1,b:[0,1],order:0,rev:0,steps:16,hits:12,rot:0,name:'DEMO BREAK',len:-1,pcm:null,rec:0,prog:0,last:-1,pos:[-1,-1,-1,-1],ov:null,trig:0};
+const SK=[{k:'s0',key:0,l:'Start',min:0,max:1,st:.001,v:0,f:pct},{k:'s1',key:1,l:'End',min:0,max:1,st:.001,v:1,f:pct},
+ {k:'s2',key:2,l:'Pitch',bi:1,min:-24,max:24,st:1,v:0,f:v=>sgn(v,' st')},{k:'s14',key:14,l:'Fine',bi:1,min:-100,max:100,st:1,v:0,f:v=>sgn(v,' ct')},
+ {k:'s3',key:3,l:'Level',min:0,max:1,st:.01,v:.7,f:pct},{k:'s17',key:17,l:'Auto sens',min:0,max:1,st:.01,v:.5,f:pct},
+ {k:'s4',key:4,l:'Attack',exp:1,min:.5,max:500,v:1,f:v=>v<10?v.toFixed(1)+' ms':Math.round(v)+' ms'},
+ {k:'s5',key:5,l:'Decay',min:0,max:3000,st:10,v:0,f:v=>v<=0?'Hold':v<1000?Math.round(v)+' ms':(v/1000).toFixed(2)+' s'}];
+const ssend=(k,v)=>send({t:'sset',k,v});
+const SKV=key=>SK.find(k=>k.key===key).v;
+SK.forEach(k=>{k.d=k.v;encoder($('sk'),k,k=>{ssend(k.key,k.v);scrSampler()})});
+function sendSmpAll(){SK.forEach(k=>ssend(k.key,k.v));ssend(6,ss.mode);ssend(7,ss.slices);ssend(16,ss.auto);ssend(15,ss.pmode);ssend(8,ss.order);ssend(9,ss.rev);ssend(10,ss.on);
+ ssend(11,ss.steps);ssend(12,ss.hits);ssend(13,ss.rot);if(ss.pcm)send({t:'sload',pcm:ss.pcm})}
+const SSEG={smode:['mode',6],sslices:['slices',7],sorder:['order',8],spmode:['pmode',15]};
+Object.keys(SSEG).forEach(id=>$(id).addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const [f,key]=SSEG[id];ss[f]=+b.dataset.v;
+ if(id==='sslices'){ss.auto=ss.slices?0:1;ssend(16,ss.auto);if(ss.slices)ssend(7,ss.slices)}else ssend(key,ss[f]);
+ $(id).querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));sPads();scrSampler()}));
+$('son').addEventListener('click',()=>{ss.on^=1;$('son').textContent='Sampler '+(ss.on?'on':'muted');$('son').setAttribute('aria-pressed',!!ss.on);ssend(10,ss.on);scrSampler()});
+$('srev').addEventListener('click',()=>{ss.rev^=1;$('srev').classList.toggle('on',!!ss.rev);$('srev').setAttribute('aria-pressed',!!ss.rev);ssend(9,ss.rev);scrSampler()});
+document.querySelectorAll('[data-s]').forEach(b=>b.addEventListener('click',()=>{const f=b.dataset.s,d=+b.dataset.d;
+ if(f==='steps'){ss.steps=Math.max(1,Math.min(16,ss.steps+d));ss.hits=Math.min(ss.hits,ss.steps)}
+ else if(f==='hits')ss.hits=Math.max(0,Math.min(ss.steps,ss.hits+d));else ss.rot=(ss.rot+d+ss.steps)%ss.steps;
+ ssend(11,ss.steps);ssend(12,ss.hits);ssend(13,ss.rot);sPat();scrSampler()}));
+function sPat(){$('shits').textContent=ss.hits;$('ssteps').textContent=ss.steps;$('srot').textContent=ss.rot;
+ const L={steps:ss.steps,hits:ss.hits,rot:ss.rot};$('spat').innerHTML=Array.from({length:16},(_,s)=>`<i class="${hit(L,s)?'h':''}${s===stepNow?' cur':''}"></i>`).join('')}
+function sPads(){const n=ss.mode?ss.nb:1;if($('spads').children.length===n&&$('spads').dataset.m==ss.mode)return;$('spads').dataset.m=ss.mode;$('spads').style.gridTemplateColumns=n===1?'1fr':'';
+ $('spads').innerHTML=Array.from({length:n},(_,i)=>`<button data-i="${ss.mode?i:-1}" aria-label="${ss.mode?'Slice '+(i+1):'Play the region'}">${ss.mode?i+1:'Play'}</button>`).join('')}
+$('spads').addEventListener('pointerdown',e=>{const b=e.target.closest('button');if(!b)return;
+ if(!started){$('msg').textContent='Press Play to hear the sampler.';return}send({t:'strig',i:+b.dataset.i})});
+// resample: press a length to arm (the recording starts on the next downbeat), press it again to cancel
+$('sarm').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+ if(!started){$('msg').textContent='Press Play first: resampling records the running mix.';return}
+ const v=+b.dataset.v,cancel=ss.rec&&ss.armBars===v;ss.armBars=cancel?0:v;send({t:'sarm',b:ss.armBars});
+ $('sarm').querySelectorAll('button').forEach(x=>x.classList.toggle('on',!cancel&&x===b));if(!cancel){ss.prevName=ss.prevName||ss.name;ss.recName='RESAMPLE '+v+(v>1?' BARS':' BAR');ss.rec=1}else ss.prevName=nullscrSampler()});
+$('sdemo').addEventListener('click',()=>{ss.name='DEMO BREAK';ss.pcm=null;send({t:'sdemo'});resetRegion();scrSampler()});
+function resetRegion(){[0,1].forEach(key=>{const k=SK.find(x=>x.key===key);k.v=key;k.draw&&k.draw();ssend(key,k.v)})}
+$('sload').addEventListener('click',()=>$('sfile').click());
+$('sfile').addEventListener('change',()=>{const f=$('sfile').files[0];if(f)loadSample(f);$('sfile').value=''});
+async function loadSample(f){
+ $('sinfo').textContent='Decoding '+f.name+'…';
+ try{const buf=await new OfflineAudioContext(1,1,SR).decodeAudioData(await f.arrayBuffer());
+  const n=Math.min(1<<21,Math.ceil(buf.duration*SR)),oc=new OfflineAudioContext(1,n,SR),src=oc.createBufferSource();
+  src.buffer=buf;src.connect(oc.destination);src.start();const out=(await oc.startRendering()).getChannelData(0);
+  ss.pcm=new Float32Array(out);ss.name=f.name.replace(/\.[^.]+$/,'').toUpperCase().replace(/[^A-Z0-9 _\-.]/g,' ').slice(0,19);
+  resetRegion();
+  if(started)send({t:'sload',pcm:ss.pcm});
+  else smpOv(jsOverview(ss.pcm,146),ss.pcm.length);
+  $('sinfo').textContent=buf.duration*SR>(1<<21)?'Cut to the first 47 s':'';
+ }catch(err){$('sinfo').textContent='Could not decode '+f.name}
+ scrSampler()}
+function jsOverview(a,cols){let pk=1e-6;for(const x of a)pk=Math.max(pk,Math.abs(x));const o=[];
+ for(let c=0;c<cols;c++){let m=0;for(let i=Math.floor(a.length*c/cols);i<Math.floor(a.length*(c+1)/cols);i++)m=Math.max(m,Math.abs(a[i]));o.push(Math.round(m/pk*255))}return o}
+// drop a file anywhere on the sampler page (or the display)
+['s-sampler','scr'].forEach(id=>{const el=$(id);
+ el.addEventListener('dragover',e=>{e.preventDefault();$('s-sampler').classList.add('drag')});
+ el.addEventListener('dragleave',()=>$('s-sampler').classList.remove('drag'));
+ el.addEventListener('drop',e=>{e.preventDefault();$('s-sampler').classList.remove('drag');const f=e.dataTransfer.files[0];if(f){if(curSec!=='sampler')showSec('sampler');loadSample(f)}})});
+function smpOv(ov,len){ss.ov=ov;ss.len=len;if(sc){const o=new Uint8Array(sc.e.memory.buffer,sc.e.scr_smp_ov(),146);for(let i=0;i<146;i++)o[i]=ov[i]|0}scrSampler()}
+function smpInfo(a){const was=ss.rec,nb0=ss.nb;ss.pos=a.slice(0,4);ss.nb=a[10]|0;ss.b=a.slice(11,12+ss.nb);sPads();ss.last=a[4];ss.rec=a[5];ss.prog=a[6];if(a[7]>0||ss.len>=0)ss.len=a[7];
+ if(was&&!ss.rec)$('sarm').querySelectorAll('button').forEach(x=>x.classList.remove('on'));
+ if(was===2&&!ss.rec){ss.pcm=null;ss.name=ss.recName;ss.prevName=null;resetRegion();scrSampler()}
+ if(a[8]!==ss.trig){ss.trig=a[8];const p=$('spads').children[ss.mode?ss.last:0];if(p){p.classList.add('hot');setTimeout(()=>p.classList.remove('hot'),90)}}
+ $('sinfo').textContent=ss.rec===1?'Armed: records from the next downbeat':ss.rec===2?'Resampling… '+Math.round(ss.prog*100)+'%':(ss.len>0?(ss.len/SR).toFixed(2)+' s mono':'');
+ scrSampler(ss.nb===nb0)}
+function scrSampler(fast){if(!sc||scrN!==13)return;
+ const P=v=>Math.round(v*1000);
+ sc.e.scr_smp_state(ss.len<0?-1:ss.len,P(SKV(0)),P(SKV(1)),ss.slices,ss.mode,ss.last|0,ss.rec,P(ss.prog));
+ sc.e.scr_smp_pos(...ss.pos.map(v=>v<0?-1:P(v)));
+ {const b=new Int16Array(sc.e.memory.buffer,sc.e.scr_smp_bounds(ss.nb),17);ss.b.forEach((v,i)=>b[i]=P(v))}
+ if(fast)return;
+ sc.e.scr_smp_lane(ss.steps,ss.hits,ss.rot,ss.on);
+ const secs=ss.len>0?(ss.len/SR*(SKV(1)-SKV(0))).toFixed(2)+'S':'-';
+ mscreen(ss.name,`${secs}  ${ss.mode?(ss.auto?'AUTO '+ss.nb:'SLICE '+ss.slices)+(ss.order?' RND':''):'ONE SHOT'}${ss.rev?'  REV':''}  ${sgn(SKV(2))}${SKV(14)?'.'+String(Math.abs(SKV(14))).padStart(2,'0'):''} ${ss.pmode?'KEEP':'VARI'}`,
+  [['STA',Math.round(SKV(0)*100)],['END',Math.round(SKV(1)*100)],['PIT',sgn(SKV(2))],[ss.auto&&ss.mode?'SNS':'LVL',Math.round(SKV(ss.auto&&ss.mode?17:3)*100)]])}
+sPat();sPads();
 
 // filter browser
 function showFilter(i,pop){cur=i;$('flt').value=i;scrModel(i,pop)}
@@ -815,13 +937,15 @@ async function start(){
   else if(d.t==='wpts')wavePts(d.pts)
   else if(d.t==='wlive')waveLive(d)
   else if(d.t==='mods')modsInfo(d.a)
+  else if(d.t==='smp')smpInfo(d.a)
+  else if(d.t==='sov')smpOv(d.ov,d.len)
   else if(d.t==='gr')showGR(d.g);
   else if(d.t==='err')$('msg').textContent='Engine failed to load: '+d.m};
  const bin=atob(WASM_GZ),gz=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)gz[i]=bin.charCodeAt(i);
  const wasm=await new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
  node.port.postMessage({t:'init',wasm},[wasm]);
  knobs.forEach(sendKnob);send({t:'set',id:5,v:sweep?1:0});send({t:'set',id:6,v:+$('auto').value});
- mute.forEach((m,i)=>send({t:'set',id:10+i,v:m?1:0}));sendVinyl();sendWaveAll();sendModsAll();lanes.forEach((L,i)=>send({t:'euc',lane:i,n:L.steps,k:L.hits,r:L.rot}));
+ mute.forEach((m,i)=>send({t:'set',id:10+i,v:m?1:0}));sendVinyl();sendSmpAll();sendWaveAll();sendModsAll();lanes.forEach((L,i)=>send({t:'euc',lane:i,n:L.steps,k:L.hits,r:L.rot}));
  started=true;
 }
 $('play').addEventListener('click',async()=>{
@@ -831,6 +955,75 @@ $('play').addEventListener('click',async()=>{
   $('play').querySelector('span').textContent=on?'Stop':'Play';sc&&sc.set(SS.playing,on?1:0);$('msg').textContent='';
  }catch(err){$('msg').textContent='Audio could not start: '+err.message}
 });
+// ---- the encoders: line 1 of the footer = the four front panel encoders, line 2 = the four under the screen.
+// Each page maps eight parameters; the panel above mirrors them (and the page's own controls stay in sync).
+let selLane=1;
+$('lanes').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const l=b.dataset.l??b.dataset.mute;if(l!==undefined)selLane=+l},true);
+const KN=n=>knobs.find(k=>k.k===n);
+const VP=(l,min,max,get,set,f)=>({l,min,max,st:1,get,set,f:f||(v=>''+v)});
+function segVP(id,l){const bs=()=>[...$(id).querySelectorAll('button')];
+ return VP(l,0,bs().length-1,()=>Math.max(0,bs().findIndex(b=>b.classList.contains('on'))),i=>{const b=bs()[i];if(b&&!b.classList.contains('on'))b.click()},i=>(bs()[i]||{}).textContent||'')}
+function stepVP(l,min,max,get,sel){return VP(l,min,max,get,v=>{let d=Math.round(v)-get(),g=0;while(d!==0&&g++<40){const b=document.querySelector(sel+'[data-d="'+(d>0?1:-1)+'"]');if(!b)break;b.click();d=Math.round(v)-get()}})}
+function togVP(l,get,btn,on='On',off='Off'){return VP(l,0,1,()=>get()?1:0,v=>{if(!!v!==!!get())$(btn).click()},v=>v?on:off)}
+const AUTOV=[0,1,2,4,8];
+const pModel=VP('Model',0,26,()=>Math.max(0,cur),i=>send({t:'sel',i}),i=>names[i]?splitName(names[i])[0]:''+(i+1));
+const pAuto=VP('Auto',0,4,()=>Math.max(0,AUTOV.indexOf(+$('auto').value)),i=>{$('auto').value=AUTOV[i];$('auto').dispatchEvent(new Event('change'))},i=>AUTOV[i]?AUTOV[i]+' bar':'Hold');
+const pSweep=togVP('Sweep',()=>sweep,'sweep');
+const laneSet=(f,v)=>{const L=lanes[selLane];L[f]=v;if(f==='steps'){L.hits=Math.min(L.hits,L.steps);L.rot=Math.min(L.rot,L.steps-1)}
+ send({t:'euc',lane:selLane,n:L.steps,k:L.hits,r:L.rot});renderLanes();scrLanes()};
+const LV=(l,f,min,max)=>VP(l,min,max,()=>lanes[selLane][f],v=>laneSet(f,Math.min(v,f==='steps'?16:f==='hits'?lanes[selLane].steps:lanes[selLane].steps-1)));
+const pLane=VP('Lane',0,4,()=>selLane,v=>{selLane=v;sc&&sc.set(SS.sel,v)},v=>lanes[v].n);
+const pMute=VP('Mute',0,1,()=>selLane<4&&mute[selLane]?1:0,v=>{if(selLane<4&&!!v!==mute[selLane])document.querySelector('[data-mute="'+selLane+'"]').click()},v=>v?'Muted':'On');
+const MKK=(pg,i)=>MK[pg][i];
+const pOct=stepVP('Octave',-3,3,()=>wl.oct,'[data-w="oct"]');
+const wStep=(l,f,min,max)=>stepVP(l,min,max,()=>wl[f],'[data-w="'+f+'"]');
+const pPre=VP('Preset',0,WP.presets.length-1,()=>wPre,i=>loadPreset(i),i=>WP.presets[i].name);
+const EG=()=>['e1','e2','e3'][eFocus];
+const envP=i=>({...WK.e1[i],k:undefined,get:()=>WK[EG()][i].v,set:v=>{const k=WK[EG()][i];k.v=v;k.draw();k.onv(k)}});
+const pEnv=VP('Env',0,2,()=>eFocus,i=>envFocus(i),i=>['Filters','Amp','Mod'][i]);
+const pEMode=VP('Curve',0,1,()=>wv[[50,58,66][eFocus]]>=.5?1:0,v=>{const b=document.querySelector('.emode[data-id="'+[50,58,66][eFocus]+'"] button[data-v="'+v+'"]');b&&b.click()},v=>v?'Lin':'Exp');
+const WVOC=l=>WK.voc.find(k=>k.l===l);
+const pSlot=VP('Slot',0,14,()=>mxFocus,s=>{mxFocus=s;mxUI(true)},s=>''+(s+1));
+const pSrc=VP('Source',0,MXS.length-1,()=>wv[400+mxFocus*3]|0,v=>{const s=$('mxs'+mxFocus);s.value=v;s.dispatchEvent(new Event('change'))},v=>MXS[v][1]);
+const pDst=VP('Dest',0,MXD.length-1,()=>wv[401+mxFocus*3]|0,v=>{const s=$('mxd'+mxFocus);s.value=v;s.dispatchEvent(new Event('change'))},v=>MXD[v][1]);
+const pAmt={l:'Amount',bi:1,min:-1,max:1,st:.01,get:()=>mxKnobs[mxFocus].v,set:v=>{const k=mxKnobs[mxFocus];k.v=v;k.draw();k.onv(k)},f:()=>mxAmtTxt(mxFocus)};
+const SKK=key=>SK.find(k=>k.key===key);
+const pSHits=stepVP('Hits',0,16,()=>ss.hits,'[data-s="hits"]');
+const pVOn=togVP('Vinyl',()=>vst.on,'von');
+// [parameter, 3-letter footer label]
+const PAGES={
+ model:[[KN('res'),'RES'],[KN('cut'),'CUT'],[KN('env'),'ENV'],[KN('drv'),'DRV'],[KN('bpm'),'BPM'],[pModel,'MDL'],[pAuto,'AUT'],[pSweep,'SWP']],
+ eucl:[[pLane,'LN'],[LV('Hits','hits',0,16),'HIT'],[LV('Steps','steps',1,16),'STP'],[LV('Rotate','rot',0,15),'ROT'],[KN('bpm'),'BPM'],[pMute,'MUT'],[pModel,'MDL'],[pAuto,'AUT']],
+ shift:[[MKK('shift',0),'LEN'],[MKK('shift',1),'CHG'],[MKK('shift',2),'RNG'],[segVP('shscale','Scale'),'SCL'],[segVP('shgate','Gate'),'GAT'],[pOct,'OCT'],[KN('bpm'),'BPM'],[WVOC('Gate'),'LEN']],
+ marbles:[[MKK('marbles',0),'BIA'],[MKK('marbles',1),'JIT'],[MKK('marbles',2),'DJV'],[MKK('marbles',3),'LEN'],[MKK('marbles',4),'SPR'],[MKK('marbles',5),'XB'],[MKK('marbles',6),'STP'],[segVP('mbmodel','T model'),'MDL']],
+ play:[[pPre,'PRE'],[segVP('wmode','Mode'),'MOD'],[pOct,'OCT'],[WVOC('Gate'),'GAT'],[wStep('Hits','hits',0,16),'HIT'],[wStep('Steps','steps',1,16),'STP'],[wStep('Rotate','rot',0,15),'ROT'],[WVOC('Volume'),'VOL']],
+ osc:[[WK.osc[0],'WAV'],[WK.osc[1],'WEN'],[WK.osc[2],'TUN'],[WK.osc[3],'FIN'],[segVP('oscsel','Osc'),'OSC'],[WK.osc[4],'LVL'],[WK.osc[5],'PW'],[WK.osc[6],'FM']],
+ env:[[envP(0),'ATK'],[envP(1),'DEC'],[envP(2),'SUS'],[envP(3),'REL'],[pEnv,'ENV'],[pEMode,'CRV'],[WVOC('Gate'),'GAT'],[e3K,'E3A']],
+ tides:[[MKK('tides',0),'RAT'],[MKK('tides',1),'SHP'],[MKK('tides',2),'SLP'],[MKK('tides',3),'SMO'],[MKK('tides',4),'SHF'],[routeK[0],'O1'],[routeK[1],'O2'],[segVP('tdramp','Ramp'),'RMP']],
+ matrix:[[pSlot,'SLT'],[pSrc,'SRC'],[pDst,'DST'],[pAmt,'AMT'],[WVOC('Level'),'LVL'],[WK.flt[4],'CUT'],[WK.flt[5],'RES'],[WK.osc[0],'WAV']],
+ sampler:[[SKK(0),'STA'],[SKK(1),'END'],[SKK(2),'PIT'],[SKK(14),'FIN'],[SKK(17),'SNS'],[pSHits,'HIT'],[SKK(5),'DEC'],[SKK(3),'LVL']],
+ beads:[[MKK('beads',0),'TIM'],[MKK('beads',1),'SIZ'],[MKK('beads',3),'PIT'],[MKK('beads',4),'DNS'],[MKK('beads',2),'SHP'],[MKK('beads',5),'FB'],[MKK('beads',6),'WET'],[MKK('beads',7),'REV']],
+ vinyl:[[VK.vcomp,'CMP'],[VK.vnoise,'NOI'],[VK.vwow,'WOW'],[VK.vin,'IN'],[VK.vout,'OUT'],[pVOn,'ON'],[segVP('vmode','Comp mode'),'MOD'],null],
+};
+const tget=t=>t.get?t.get():t.v;
+const tset=(t,v)=>{if(t.set)t.set(v);else{t.v=v;t.draw&&t.draw();t.onv&&t.onv(t)}};
+const short=(lbl,s)=>(''+s).toUpperCase().replace(/\s*(ST|DB|BPM|CT|OCT|16TH|HZ|MS)$/,'').replace(/\s+/g,'').slice(0,Math.max(2,8-lbl.length));
+let prox=[],footCache=[];
+function buildPanel(pg){const map=PAGES[pg]||[];prox=[];footCache=[];
+ for(let r=0;r<2;r++){const host=$('pk'+r);host.innerHTML='';
+  for(let i=r*4;i<r*4+4;i++){const e=map[i];
+   if(!e||!e[0]){host.insertAdjacentHTML('beforeend','<div class="nil"></div>');prox[i]=null;continue}
+   const t=e[0],px={k:'p'+i,l:t.l,min:t.min,max:t.max,st:t.st,exp:t.exp,bi:t.bi,f:v=>t.f(v),v:tget(t),d:t.d};
+   px.t=t;prox[i]=px;encoder(host,px,p=>{tset(t,p.v);panelSync()})}}
+ panelSync()}
+function panelSync(){const map=PAGES[curSec]||[];
+ prox.forEach(px=>{if(!px)return;const v=tget(px.t);if(v!==px.v&&!$('k-'+px.k).classList.contains('act')){px.v=v;px.draw()}});
+ if(!sc)return;
+ for(let i=0;i<8;i++){const e=map[i],txt=e&&e[0]?e[1]+'|'+short(e[1],e[0].f(tget(e[0]))):'';
+  if(footCache[i]===txt)continue;footCache[i]=txt;
+  const m=new Uint8Array(sc.e.memory.buffer,sc.e.scr_buf(),96);m.fill(0);for(let j=0;j<Math.min(95,txt.length);j++)m[j]=txt.charCodeAt(j)&127;sc.e.scr_foot(i)}}
+setInterval(panelSync,150);
+buildPanel(curSec);
 renderLanes();
 }
 </script>
