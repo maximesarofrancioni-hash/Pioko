@@ -628,7 +628,7 @@ static void scr_marbles(void)
     mod_foot();
 }
 
-/* TIDES: the four outputs scrolling as round LEDs on the FILTER screen's 4 px matrix, one colour each (the
+/* TIDES: the four outputs scrolling as round LEDs over the FILTER screen's faint matrix, one colour each (the
  * footer's column colours; distinct fallbacks on single-hue themes), output 1 on top, the newest at the right */
 static void scr_tides(void)
 {
@@ -640,11 +640,14 @@ static void scr_tides(void)
     for (int c = 0; c < NCOL; c++)
         for (int y = bot; y >= top; y -= 4) gfx_px(4 + c * 4, y, T->line);
     gfx_line(2, cy, W - 3, cy, T->line, true);
+    /* the last 128 values (about 3 s) over the width, as before; one LED every 4th value, counted from the
+     * start of the stream, so each LED keeps its value and slides ~1 px per update instead of jumping */
     for (int ch = 3; ch >= 0; ch--)
-        for (int c = 0; c < NCOL; c++) {
-            int i = (M.td_n - NCOL + c) & 127;
-            int y = cy - M.td[ch][i] * (bot - top - 4) / 2 / 64;
-            led_round(4 + c * 4, y, col[ch]);
+        for (int x = 0; x < 128; x++) {
+            int n = M.td_n - 128 + x;
+            if (n & 3) continue;
+            int y = cy - M.td[ch][n & 127] * (bot - top - 4) / 2 / 64;
+            led_round(3 + x * (W - 7) / 128, y, col[ch]);
         }
     mod_foot();
 }
