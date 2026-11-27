@@ -143,12 +143,21 @@ section.drag{outline:3px dashed var(--led);outline-offset:4px}.wpat i.cur{outlin
 .pat{display:flex;gap:3px}.pat i{flex:1;height:18px;border-radius:3px;background:var(--line)}
 .pat i.h{background:var(--c)}.pat i.cur{outline:2px solid var(--ink);outline-offset:1px}
 .bottom{margin-top:22px;padding-top:14px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-start}
-.thm{display:flex;flex-direction:column;gap:6px;flex:none}.thm button{min-width:150px}
 .foot{margin:0;color:var(--mute);font-size:14px;flex:1 1 320px;max-width:80ch}
 #msg{color:var(--led);font-weight:600}
 @media(max-width:760px){.disp{grid-template-columns:1fr}.dctl .src:not(.hint){display:none}.dctl .hint{margin:0}
  .lane{grid-template-columns:repeat(3,minmax(0,1fr))}.lane .name{grid-column:1/-1}.lane .pat{grid-column:1/-1}}
 @media(max-width:600px){.now{text-align:left;flex:none}header{flex-direction:column;align-items:stretch}#play{justify-content:center}}
+header .sp{flex:1}
+dialog#settings{width:min(440px,calc(100vw - 32px));border:1px solid var(--line);border-radius:12px;background:var(--plate);color:var(--ink);padding:18px 20px 16px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+dialog#settings::backdrop{background:rgba(0,0,0,.45)}
+dialog#settings h2{margin:0 0 6px;font:700 24px/1.1 "Barlow Condensed",sans-serif}
+dialog#settings h3{margin:14px 0 4px;font:700 15px/1 "Barlow Condensed",sans-serif;letter-spacing:.06em;color:var(--mute);border-bottom:1px solid var(--line);padding-bottom:4px}
+.srow{display:grid;grid-template-columns:96px minmax(0,1fr);gap:10px;align-items:center;margin-top:8px}
+.srow input[type=range]{width:100%;accent-color:var(--led)}
+.srow .vol{display:flex;align-items:center;gap:10px}.srow output{font:600 16px Barlow,sans-serif;font-variant-numeric:tabular-nums;min-width:64px;text-align:right}
+.srow select{width:100%}.srow .seg button{flex:1;padding:0 6px}.srow .seg{display:flex}
+.sfoot{display:flex;justify-content:space-between;gap:10px;margin-top:18px}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -157,7 +166,19 @@ section.drag{outline:3px dashed var(--led);outline-offset:4px}.wpat i.cur{outlin
  <header>
   <h1>Pyoko <span lang="ja">ぴょこ</span><small>sst-filters · osc440 · sampler · Marbles · Tides · Beads · SP-303 Vinyl Sim</small></h1>
   <button id="play" aria-pressed="false"><i></i><span>Play</span></button>
+  <span class="sp"></span><button id="setb" aria-haspopup="dialog">Settings</button>
  </header>
+ <dialog id="settings" aria-labelledby="set-h">
+  <h2 id="set-h">Settings</h2>
+  <h3>Audio</h3>
+  <div class="srow"><label class="legend" for="s-vol">Volume</label><div class="vol"><input type="range" id="s-vol" min="-40" max="6" step="1"><output id="s-volv" for="s-vol"></output></div></div>
+  <div class="srow"><span class="legend">Latency</span><span class="seg" id="s-lat"><button data-v="interactive">Low</button><button data-v="balanced">Balanced</button><button data-v="playback">High</button></span></div>
+  <p class="note" id="s-latn" hidden>New latency applies after reloading the page.</p>
+  <h3>Display</h3>
+  <div class="srow"><label class="legend" for="s-dth">Screen</label><select id="s-dth"></select></div>
+  <div class="srow"><span class="legend">Page</span><span class="seg" id="s-pth"><button data-v="auto">Auto</button><button data-v="light">Light</button><button data-v="dark">Dark</button></span></div>
+  <div class="sfoot"><button id="s-reset">Reset</button><button id="s-done">Done</button></div>
+ </dialog>
 
  <div class="disp">
   <div class="bezel"><canvas id="scr" width="150" height="112" role="img" aria-label="600 x 450 AMOLED display"></canvas></div>
@@ -313,7 +334,6 @@ section.drag{outline:3px dashed var(--led);outline-offset:4px}.wpat i.cur{outlin
   <p class="note">The SP-303's Vinyl Sim program, decoded from its firmware and run in an emulation of its effects DSP, on the master bus after the filters. Bit-exact with the reference simulator; the Reconstructed compressor is a fitted model, not a confirmed decode. Not yet checked against your SP-505. The SP runs at 44.1 kHz, so the page asks the browser for 44.1 kHz too.</p>
  </section>
  <div class="bottom">
-  <div class="thm"><span class="legend">Display theme</span><button id="theme">EMBER</button></div>
   <p class="foot"><span id="msg"></span> The page keys pick the screen; press FILTER again to switch between the FILTER and HOME screens.
    Display: open-mpk4 firmware <code>gfx.c</code> + boot with Pyoko's screens. Sound: filter-lab C++ engine, osc440, and Mutable Instruments Marbles, Tides 2 and Beads (MIT, unmodified) in WebAssembly, then the SP-303 Vinyl Sim. Use headphones: bass goes down to 55 Hz.</p>
  </div>
@@ -490,6 +510,20 @@ $('lanes').addEventListener('click',e=>{
 // open-mpk4 display
 const SS={p_mode:48,p_oct:49,p_vol:50,p_on:51,e_amt_lad:33,e_amt_svf:34,e_gate:35,l_ph:36,l_rate:37,l_dly:38,f_svf:39,f_lad:40,f_res:41,f_drv:42,f_par:43,f_svfn:44,f_ladn:45,e_lv0:46,e_lv1:47,w_osc:26,w_pos:27,w_lvl:28,w_cut:29,w_res:30,w_held:31,w_wt:32,v_on:19,v_mode:20,v_comp:21,v_noise:22,v_wow:23,v_in:24,v_gr:25,screen:0,theme:1,playing:2,bpm:3,filter:4,nfilt:5,step:6,bar:7,barsper:8,sweep:9,res:10,cut:11,env:12,drv:13,fc:14,sel:15,popk:16,popm:17,boot:18};
 const now=()=>Math.floor(performance.now())+1000;
+// settings, remembered in this browser
+const SDEF={vol:0,lat:'interactive',dth:0,pth:'auto'};
+const cfg=Object.assign({},SDEF);
+try{Object.assign(cfg,JSON.parse(localStorage.getItem('pyoko.settings')||'{}'))}catch(e){}
+const saveCfg=()=>{try{localStorage.setItem('pyoko.settings',JSON.stringify(cfg))}catch(e){}};
+let master=null;
+const volGain=()=>cfg.vol<=-40?0:10**(cfg.vol/20);
+const segOn=(id,v)=>$(id).querySelectorAll('button').forEach(b=>{const on=b.dataset.v===String(v);b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});
+function applyPage(){if(cfg.pth==='auto')document.documentElement.removeAttribute('data-theme');else document.documentElement.dataset.theme=cfg.pth;segOn('s-pth',cfg.pth)}
+function applyVol(){$('s-vol').value=cfg.vol;$('s-volv').textContent=cfg.vol<=-40?'Off':(cfg.vol>0?'+':'')+cfg.vol+' dB';if(master)master.gain.setTargetAtTime(volGain(),master.context.currentTime,.02)}
+function setDispTheme(n){if(!sc)return;const nt=sc.e.scr_n_themes();themeN=((n%nt)+nt)%nt;sc.set(SS.theme,themeN);$('s-dth').value=themeN;cfg.dth=themeN;saveCfg()}
+function syncSettings(){applyVol();segOn('s-lat',cfg.lat);$('s-latn').hidden=!ctx||cfg.lat===ctxLat;applyPage();if(sc)$('s-dth').value=themeN}
+let ctxLat=null;
+applyPage();
 let sc=null,scrN=1,themeN=0,spec=null;
 const gunzip=async b64=>{const bin=atob(b64),gz=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)gz[i]=bin.charCodeAt(i);
  return new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer()};
@@ -498,7 +532,14 @@ function splitName(n){const m=n.match(/^(.*?)\s+(?:-\s+|\()(.*?)\)?$/);return (m
 function scrModel(i,pop){if(!sc||!names[i])return;setTimeout(respFilter,0);const [f,v]=splitName(names[i]);sc.str(0,f);sc.str(1,v);sc.set(SS.filter,i);sc.set(SS.nfilt,names.length);if(pop)sc.set(SS.popm,0)}
 function setScreen(i){scrN=i;sc&&sc.set(SS.screen,i);scrMods();if(i===13&&typeof scrSampler==='function')scrSampler();if(i===12&&typeof scrMatrix==='function')scrMatrix();if(i===1){respFilter();respWave()}}
 
-$('theme').addEventListener('click',()=>{if(!sc)return;themeN=(themeN+1)%sc.e.scr_n_themes();sc.set(SS.theme,themeN);$('theme').textContent=sc.cstr(sc.e.scr_theme_name(themeN))});
+$('setb').addEventListener('click',()=>{syncSettings();$('settings').showModal()});
+$('s-done').addEventListener('click',()=>$('settings').close());
+$('settings').addEventListener('click',e=>{if(e.target===$('settings'))$('settings').close()});
+$('s-vol').addEventListener('input',()=>{cfg.vol=+$('s-vol').value;applyVol();saveCfg()});
+$('s-lat').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;cfg.lat=b.dataset.v;saveCfg();syncSettings()});
+$('s-pth').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;cfg.pth=b.dataset.v;saveCfg();applyPage()});
+$('s-dth').addEventListener('change',()=>setDispTheme(+$('s-dth').value));
+$('s-reset').addEventListener('click',()=>{Object.assign(cfg,SDEF);saveCfg();setDispTheme(SDEF.dth);syncSettings()});
 (async()=>{
  try{
   const {instance:{exports:e}}=await WebAssembly.instantiate(await gunzip(SCR_GZ),{});
@@ -512,7 +553,9 @@ $('theme').addEventListener('click',()=>{if(!sc)return;themeN=(themeN+1)%sc.e.sc
   sc={e,set:(k,v)=>e.scr_set(k,v,now()),
    str:(w,t)=>{const m=new Uint8Array(e.memory.buffer,e.scr_buf(),96);m.fill(0);for(let i=0;i<Math.min(95,t.length);i++)m[i]=t.charCodeAt(i)&127;e.scr_str(w)},
    cstr:p=>{const m=new Uint8Array(e.memory.buffer);let s='';while(m[p])s+=String.fromCharCode(m[p++]);return s}};
-  sc.set(SS.boot,1);sc.set(SS.screen,scrN);   // MODEL is lit at load: its FILTER screen
+  sc.set(SS.boot,1);sc.set(SS.screen,scrN);
+  $('s-dth').innerHTML=Array.from({length:e.scr_n_themes()},(_,i)=>`<option value="${i}">${sc.cstr(e.scr_theme_name(i))}</option>`).join('');
+  setDispTheme(cfg.dth|0);   // MODEL is lit at load: its FILTER screen
   knobs.forEach(k=>scrKnob(k,false));scrVinyl();scrWave();envFocus(eFocus);sc.set(SS.sweep,sweep?1:0);sc.set(SS.barsper,+$('auto').value);scrLanes();
   if(names.length)scrModel(cur<0?0:cur,false);
   const g=$('scr').getContext('2d'),img=g.createImageData(W,H),d=img.data;
@@ -911,22 +954,24 @@ $('flt').addEventListener('change',()=>send({t:'sel',i:+$('flt').value}));
 $('prev').addEventListener('click',()=>send({t:'sel',i:(cur-1+names.length)%Math.max(1,names.length)}));
 $('next').addEventListener('click',()=>send({t:'sel',i:(cur+1)%Math.max(1,names.length)}));
 $('auto').addEventListener('change',()=>{send({t:'set',id:6,v:+$('auto').value});sc&&sc.set(SS.barsper,+$('auto').value)});
-document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;
+document.addEventListener('keydown',e=>{if($('settings').open||e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;
  if(e.key==='ArrowRight'||e.key==='n')$('next').click();if(e.key==='ArrowLeft'||e.key==='p')$('prev').click();
  if(e.key===' '){e.preventDefault();$('play').click()}
- if(/^[0-9]$/.test(e.key)){const ks=document.querySelectorAll('#keys .key'),i=e.key==='0'?9:+e.key-1;if(ks[i])ks[i].click()}if(e.key==='t')$('theme').click()});
+ if(/^[0-9]$/.test(e.key)){const ks=document.querySelectorAll('#keys .key'),i=e.key==='0'?9:+e.key-1;if(ks[i])ks[i].click()}if(e.key==='t')setDispTheme(themeN+1)});
 
 // audio
 async function start(){
  const AC=window.AudioContext||window.webkitAudioContext;
- try{ctx=new AC({latencyHint:'interactive',sampleRate:44100})}catch(e){ctx=new AC({latencyHint:'interactive'})}
+ ctxLat=cfg.lat;
+ try{ctx=new AC({latencyHint:ctxLat,sampleRate:44100})}catch(e){ctx=new AC({latencyHint:ctxLat})}
  const src=$('vinylsrc').textContent+'\nconst VDATA='+$('vdata').textContent+';\n'+$('wk').textContent;
  // blob: first; sandboxed frames with an opaque origin refuse it, so fall back to a data: URL
  try{await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([src],{type:'application/javascript'})))}
  catch(e){await ctx.audioWorklet.addModule('data:text/javascript;base64,'+btoa(unescape(encodeURIComponent(src))))}
  node=new AudioWorkletNode(ctx,'filterlab',{numberOfInputs:0,numberOfOutputs:2,outputChannelCount:[2,1]});
  an=ctx.createAnalyser();an.fftSize=4096;an.smoothingTimeConstant=.75;an.minDecibels=-110;an.maxDecibels=0;
- node.connect(an,0);an.connect(ctx.destination);
+ master=ctx.createGain();master.gain.value=volGain();
+ node.connect(an,0);an.connect(master);master.connect(ctx.destination);
  anW=ctx.createAnalyser();anW.fftSize=4096;anW.smoothingTimeConstant=.75;node.connect(anW,1);
  const mute0=ctx.createGain();mute0.gain.value=0;anW.connect(mute0);mute0.connect(ctx.destination);   // keeps the analyser pulled
  node.port.onmessage=m=>{const d=m.data;
