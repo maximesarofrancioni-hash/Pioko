@@ -1,0 +1,8 @@
+# filter-lab, Raspberry Pi 4, 64-bit Circle kernel
+arm_64bit=1
+armstub=armstub8-rpi4.bin
+kernel=kernel8-rpi4.img
+kernel_address=0x80000
+disable_splash=1
+boot_delay=0
+gpu_mem=16

@@ -1,0 +1,51 @@
+name: build
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch Circle and the sst libraries
+        run: |
+          git clone --depth 1 https://github.com/rsta2/circle.git circle
+          mkdir -p libs
+          git clone --depth 1 https://github.com/surge-synthesizer/sst-filters.git libs/sst-filters
+          git clone --depth 1 https://github.com/surge-synthesizer/sst-basic-blocks.git libs/sst-basic-blocks
+          git clone --depth 1 https://github.com/simd-everywhere/simde.git libs/simde
+          for d in circle libs/*; do echo "$d $(git -C $d rev-parse --short HEAD)"; done | tee versions.txt
+
+      - name: Arm GNU toolchain (aarch64-none-elf)
+        run: |
+          V=14.2.rel1
+          curl -sSL -o tc.tar.xz "https://developer.arm.com/-/media/Files/downloads/gnu/$V/binrel/arm-gnu-toolchain-$V-x86_64-aarch64-none-elf.tar.xz"
+          mkdir -p toolchain && tar xf tc.tar.xz -C toolchain --strip-components=1
+          echo "$PWD/toolchain/bin" >> $GITHUB_PATH
+
+      - name: Build Circle
+        run: |
+          cp circle-config/Config.mk circle/
+          cd circle && ./makeall --nosample -j$(nproc) || ./makeall -j$(nproc)
+          cd boot && make firmware && make armstub64
+
+      - name: Build filter-lab
+        run: make -C src -j$(nproc)
+
+      - name: Assemble SD card
+        run: |
+          mkdir sdcard
+          cd circle/boot
+          cp bootcode.bin start4.elf fixup4.dat bcm2711-rpi-4-b.dtb armstub8-rpi4.bin LICENCE.broadcom ../../sdcard/ 2>/dev/null || true
+          cp start4*.elf fixup4*.dat ../../sdcard/ 2>/dev/null || true
+          cd ../..
+          cp boot/config.txt boot/cmdline.txt src/kernel8-rpi4.img versions.txt sdcard/
+          ls -la sdcard
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: filter-lab-sdcard
+          path: sdcard/
