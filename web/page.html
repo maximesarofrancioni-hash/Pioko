@@ -308,7 +308,8 @@ dialog#settings h3{margin:14px 0 4px;font:700 15px/1 "Barlow Condensed",sans-ser
  <section class="sec" id="s-tides" hidden>
   <div class="wgrid one"><div class="wsec"><h3>Tides</h3>
    <div class="vrow"><span class="legend">Ramp</span><span class="seg" id="tdramp"><button data-v="0">AD</button><button data-v="1" class="on">Looping</button><button data-v="2">AR</button></span>
-    <span class="legend">Outputs</span><span class="seg" id="tdout"><button data-v="0">Gates</button><button data-v="1">Amplitude</button><button data-v="2" class="on">Slope · phase</button><button data-v="3">Frequency</button></span></div>
+    <span class="legend">Outputs</span><span class="seg" id="tdout"><button data-v="0">Gates</button><button data-v="1">Amplitude</button><button data-v="2" class="on">Slope · phase</button><button data-v="3">Frequency</button></span>
+    <span class="legend">View</span><span class="seg" id="tdcyc"><button data-v="1">1 cycle</button><button data-v="2">2 cycles</button></span></div>
    <div class="knobs" id="mk-tides"></div></div>
    <div class="wsec"><h3>Routing</h3><div class="routes" id="routes"></div></div></div>
   <p class="note">Mutable Instruments Tides 2 as the modulation source: four related outputs (Shift spreads them in phase, amplitude or frequency), each sent to a destination with its own amount. In AD and AR the wave lane's notes trigger it.</p>
@@ -517,7 +518,7 @@ $('lanes').addEventListener('click',e=>{
 const SS={p_mode:48,p_oct:49,p_vol:50,p_on:51,e_amt_lad:33,e_amt_svf:34,e_gate:35,l_ph:36,l_rate:37,l_dly:38,f_svf:39,f_lad:40,f_res:41,f_drv:42,f_par:43,f_svfn:44,f_ladn:45,e_lv0:46,e_lv1:47,w_osc:26,w_pos:27,w_lvl:28,w_cut:29,w_res:30,w_held:31,w_wt:32,v_on:19,v_mode:20,v_comp:21,v_noise:22,v_wow:23,v_in:24,v_gr:25,screen:0,theme:1,playing:2,bpm:3,filter:4,nfilt:5,step:6,bar:7,barsper:8,sweep:9,res:10,cut:11,env:12,drv:13,fc:14,sel:15,popk:16,popm:17,boot:18};
 const now=()=>Math.floor(performance.now())+1000;
 // settings, remembered in this browser
-const SDEF={vol:0,lat:'interactive',dth:0,pth:'auto',pal:'alu'};
+const SDEF={vol:0,lat:'interactive',dth:0,pth:'auto',pal:'alu',tdc:2};
 const cfg=Object.assign({},SDEF);
 try{Object.assign(cfg,JSON.parse(localStorage.getItem('pyoko.settings')||'{}'))}catch(e){}
 const saveCfg=()=>{try{localStorage.setItem('pyoko.settings',JSON.stringify(cfg))}catch(e){}};
@@ -551,7 +552,7 @@ function setDispTheme(n){if(!sc)return;const e=sc.e,nt=e.scr_n_themes(),tot=nt+(
    P.c.forEach((h,i)=>dv.setUint16(a+2*i,rgb565(h),true));dv.setUint8(a+22,P.ghost|0);dv.setUint8(a+23,P.glow|0);dv.setUint8(a+24,P.fps|0)}}
  if(slot===thSlot){sc.set(SS.theme,(slot+1)%nt);e.scr_frame(now())}   // same slot, new colors: make it redraw
  sc.set(SS.theme,slot);thSlot=slot;$('s-dth').value=themeN;cfg.dth=themeN;saveCfg()}
-function syncSettings(){applyVol();segOn('s-lat',cfg.lat);$('s-latn').hidden=!ctx||cfg.lat===ctxLat;applyPage();if(sc)$('s-dth').value=themeN}
+function syncSettings(){applyVol();segOn('tdcyc',cfg.tdc);tdSpan=0;segOn('s-lat',cfg.lat);$('s-latn').hidden=!ctx||cfg.lat===ctxLat;applyPage();if(sc)$('s-dth').value=themeN}
 let ctxLat=null;
 applyPage();
 let sc=null,scrN=1,themeN=0,spec=null;
@@ -901,39 +902,50 @@ function scrMods(){if(!sc)return;
   mscreen('BEADS',`${q}  SEED ${sd}${bst.freeze?'  FREEZE':''}${bst.on?'':'  BYPASS'}`,[['TIME',Math.round(MKV('beads',1)*100)],['SIZE',Math.round(MKV('beads',2)*100)],['PIT',sgn(MKV('beads',4))],['WET',Math.round(MKV('beads',7)*100)]])}}
  if(scrN===9||scrN===11)modsInfo(lastMods||new Array(30).fill(0))
 let lastMods=null;
-// TIDES screen, drawn like a scope. The four outputs arrive after every 32-frame engine block and go into a
-// ring (about 95 s). Output 1's rising crossings of the middle of its range (a range that widens at once and
-// narrows about 0.03 per second, so the trigger level holds still) are kept to a fraction of a block; their spacing is the period (the rate knob when there are
-// none: stopped, AD / AR). Every animation frame the screen's 128 values are rebuilt by interpolation over
-// two periods ending now, so the wave flows smoothly through the screen's fixed LED columns. Above 6 cycles a
-// second that would strobe, so the window starts at the latest crossing with two periods after it instead
-// (like a scope's trigger) and each LED eases toward its new value.
+// TIDES screen, drawn like a scope that never moves sideways. The four outputs arrive after every 32-frame
+// engine block and go into a ring (about 95 s). Output 1's rising crossings of the middle of its range (a
+// range that widens at once and narrows about 0.03 per second, so the level holds still) are kept to a
+// fraction of a block and counted; their spacing is the period (the rate knob when there are none: stopped,
+// AD / AR). The screen shows 1 or 2 cycles (the View switch), starting at every 1st or 2nd crossing, rebuilt
+// every animation frame by interpolation: when that span is under a second, the latest complete span, each LED
+// easing toward its new value; slower, a sweep: the span from the latest start, drawn up to now over the one
+// before. Without crossings the sweep restarts every span.
 const TDN=1<<17,TDM=TDN-1,tdBuf=[0,1,2,3].map(()=>new Float32Array(TDN));
-let tdN=0,tdLo=0,tdHi=0,tdPrev=0,tdLastX=-1,tdPer=0,tdT=0;const tdX=[];
+let tdN=0,tdLo=0,tdHi=0,tdPrev=0,tdLastX=-1,tdPer=0,tdT=0,tdXn=0,tdSpan=0;const tdX=[];
+const tdShow=[0,1,2,3].map(()=>new Float32Array(128));
 function tdFeed(td){
  for(let i=0;i+3<td.length;i+=4){const v=td[i];
   for(let c=0;c<4;c++)tdBuf[c][tdN&TDM]=td[i+c];
   tdLo=Math.min(v,tdLo+2e-5);tdHi=Math.max(v,tdHi-2e-5);const mid=(tdLo+tdHi)/2;
   if(tdN&&tdPrev<mid&&v>=mid&&tdHi-tdLo>.05){const x=tdN-1+(mid-tdPrev)/(v-tdPrev);
    if(tdLastX>=0&&x-tdLastX>2){const d=x-tdLastX;tdPer=tdPer&&Math.abs(d-tdPer)<tdPer*.5?tdPer*.85+d*.15:d}
-   tdLastX=x;tdX.push(x);if(tdX.length>64)tdX.shift()}
+   tdLastX=x;tdX.push([x,tdXn++]);if(tdX.length>64)tdX.shift()}
   tdPrev=v;tdN++}
  tdT=performance.now()}
-let tdSpan=0;const tdShow=[0,1,2,3].map(()=>new Float32Array(128));
-function tdFrame(){if(!tdN)return;const BR=ctx.sampleRate/32;
+const tdAt=(c,t)=>{const i0=Math.floor(t),f=t-i0,B=tdBuf[c];return B[i0&TDM]*(1-f)+B[(i0+1)&TDM]*f};
+function tdFrame(){if(!tdN)return;const BR=ctx.sampleRate/32,N=cfg.tdc===1?1:2,last=tdN-1;
  const live=tdPer&&tdN-tdLastX<4*tdPer,per=live?tdPer:BR/Math.max(.01,MKV('tides',0));
  // the span follows the period only when it moves by more than a fifth, so cycle-to-cycle wobble does not rescale
- if(!tdSpan||Math.abs(2*per-tdSpan)>.2*tdSpan)tdSpan=2*per;
- const span=Math.min(tdSpan,TDN-256),last=tdN-1;let t0=-1;
- const trig=live&&per<BR/6;                       // faster than 6 cycles a second: rolling would strobe
- if(trig)for(let k=tdX.length-1;k>=0;k--)if(tdX[k]+span<=last){t0=tdX[k];break}
- if(t0<0){const end=Math.min(last,last-64+(performance.now()-tdT)/1000*BR);t0=end-span}   // ~46 ms behind, advancing smoothly
- if(t0<tdN-TDN+2)t0=tdN-TDN+2;
- // triggered: each LED eases a quarter of the way per frame, so a new (never quite equal) cycle morphs in
- const k=trig?.25:1;
- for(let j=0;j<128;j++){const t=t0+j*span/127,i0=Math.floor(t),f=t-i0,a=i0&TDM,b=(i0+1)&TDM;
-  for(let c=0;c<4;c++){const B=tdBuf[c];tdShow[c][j]+=(B[a]*(1-f)+B[b]*f-tdShow[c][j])*k}
+ if(!tdSpan||Math.abs(N*per-tdSpan)>.2*tdSpan)tdSpan=N*per;
+ const span=Math.min(tdSpan,TDN/2-256),lo=tdN-TDN+2;
+ const starts=live?tdX.filter(([,n])=>n%N===0).map(([x])=>x):[];
+ const ease=span<BR?.25:1,pos=[];
+ if(starts.length&&span<BR){                                         // fast: the latest complete span
+  let a=-1;for(let k=starts.length-1;k>=0;k--)if(starts[k]+span<=last){a=starts[k];break}
+  if(a<0)a=starts[0];
+  for(let j=0;j<128;j++)pos.push(a+j*span/127);
+ }else{                                                             // slow: sweep over the previous span
+  const now=Math.min(last,last-64+(performance.now()-tdT)/1000*BR);   // ~46 ms behind, advancing smoothly
+  let a,b;
+  if(starts.length){a=starts[starts.length-1];b=starts.length>1?starts[starts.length-2]:a-span}
+  else{a=Math.floor(now/span)*span;b=a-span}                         // no crossings: fixed slots of one span
+  for(let j=0;j<128;j++){const t=j*span/127;pos.push(a+t<=now?a+t:b+t)}
+ }
+ for(let j=0;j<128;j++){const t=Math.max(lo,Math.min(last,pos[j]));
+  for(let c=0;c<4;c++)tdShow[c][j]+=(tdAt(c,t)-tdShow[c][j])*ease;
   sc.e.scr_tides_push(...tdShow.map(D=>Math.round(D[j]*63)))}}
+$('tdcyc').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;cfg.tdc=+b.dataset.v;tdSpan=0;saveCfg();segOn('tdcyc',cfg.tdc)});
+segOn('tdcyc',cfg.tdc);
 function modsInfo(a,td){lastMods=a;if(!sc)return;
  if(scrN===9){sc.e.scr_shift_state(a[0]|0,a[1]|0);const h=new Int8Array(sc.e.memory.buffer,sc.e.scr_shift_hist(),16);for(let i=0;i<16;i++)h[i]=a[2+i]<0?-1:Math.min(127,a[2+i])}
  if(td)tdFeed(td);
