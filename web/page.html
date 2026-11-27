@@ -16,6 +16,10 @@
 --bg:light-dark(#d6d9dc,#1b1d20);--plate:light-dark(#e4e6e8,#25282c);--ink:light-dark(#15171a,#e7e9eb);
 --mute:light-dark(#5b6168,#9aa1a8);--screen:#0f1113;--scr-ink:#d9dde1;--scr-dim:#3a4047;
 --led:#ff3b30;--led2:#ffb3ad;--line:light-dark(#b9bdc2,#3a3e44)}
+:root[data-pal=sand]{--bg:light-dark(#d8cfbd,#1d1a15);--plate:light-dark(#ebe3d1,#2b261f);--line:light-dark(#c4b8a0,#433b2f);--led:#ff7a1a}
+:root[data-pal=sage]{--bg:light-dark(#ccd6cd,#171c19);--plate:light-dark(#dfe8e0,#232b26);--line:light-dark(#b3c2b5,#36433a);--led:#2fd67b}
+:root[data-pal=indigo]{--bg:light-dark(#cdd2de,#15171f);--plate:light-dark(#e0e4ee,#22263a);--line:light-dark(#b4bacb,#363c55);--led:#3d8bff}
+:root[data-pal=rose]{--bg:light-dark(#dccdd1,#1d1619);--plate:light-dark(#efe1e5,#2c2226);--line:light-dark(#cbb5bc,#45343a);--led:#ff4f9a}
 :root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
 *{box-sizing:border-box;min-width:0}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Barlow,system-ui,sans-serif;overflow-x:clip}
@@ -70,7 +74,7 @@ canvas#scr{display:block;margin:0 auto;width:100%;aspect-ratio:150/112;image-ren
 .key b{display:block;width:100%;aspect-ratio:1;border-radius:6px;border:1px solid #000;position:relative;
  background:linear-gradient(#3a3d42,#26282c);box-shadow:inset 0 1px 0 #55595f,0 2px 0 #0007}
 .key span{font:700 13px/1 "Barlow Condensed",sans-serif;letter-spacing:.04em;color:var(--ink);white-space:nowrap}
-.key i{position:absolute;top:7px;left:50%;width:14px;height:4px;margin-left:-7px;border-radius:2px;background:#4a1714}
+.key i{position:absolute;top:7px;left:50%;width:14px;height:4px;margin-left:-7px;border-radius:2px;background:color-mix(in srgb,var(--led) 28%,#000)}
 .key.on i{background:var(--led);box-shadow:0 0 8px var(--led)}
 .key:active b{transform:translateY(1px);box-shadow:inset 0 1px 0 #55595f}
 .key .ls,.kgl .ls{display:none}
@@ -112,7 +116,7 @@ canvas#scr{display:block;margin:0 auto;width:100%;aspect-ratio:150/112;image-ren
  padding:4px 6px;border-bottom:1px solid var(--line);border-left:3px solid transparent}
 .slot{-webkit-user-select:none;user-select:none}.slot.off{opacity:.55}.slot.focus{border-left-color:var(--led);background:light-dark(#0000000a,#ffffff0a)}
 .slot .sh{display:flex;align-items:center;gap:6px;font:700 18px/1 "Barlow Condensed",sans-serif}
-.slot .sh i{width:10px;height:4px;border-radius:2px;background:#4a1714}.slot:not(.off) .sh i{background:var(--led);box-shadow:0 0 6px var(--led)}
+.slot .sh i{width:10px;height:4px;border-radius:2px;background:color-mix(in srgb,var(--led) 28%,#000)}.slot:not(.off) .sh i{background:var(--led);box-shadow:0 0 6px var(--led)}
 .slot .ar{color:var(--mute);text-align:center;font-size:18px}
 .slot select{min-height:40px;font-size:15px;width:100%}
 .slot .enc{flex-direction:row;gap:8px;padding:0;justify-content:flex-start}.slot .enc svg{width:48px;max-width:48px}
@@ -176,6 +180,7 @@ dialog#settings h3{margin:14px 0 4px;font:700 15px/1 "Barlow Condensed",sans-ser
   <p class="note" id="s-latn" hidden>New latency applies after reloading the page.</p>
   <h3>Display</h3>
   <div class="srow"><label class="legend" for="s-dth">Screen</label><select id="s-dth"></select></div>
+  <div class="srow"><label class="legend" for="s-pal">Plate</label><select id="s-pal"><option value="alu">Aluminium</option><option value="sand">Sand</option><option value="sage">Sage</option><option value="indigo">Indigo</option><option value="rose">Rose</option></select></div>
   <div class="srow"><span class="legend">Page</span><span class="seg" id="s-pth"><button data-v="auto">Auto</button><button data-v="light">Light</button><button data-v="dark">Dark</button></span></div>
   <div class="sfoot"><button id="s-reset">Reset</button><button id="s-done">Done</button></div>
  </dialog>
@@ -511,16 +516,40 @@ $('lanes').addEventListener('click',e=>{
 const SS={p_mode:48,p_oct:49,p_vol:50,p_on:51,e_amt_lad:33,e_amt_svf:34,e_gate:35,l_ph:36,l_rate:37,l_dly:38,f_svf:39,f_lad:40,f_res:41,f_drv:42,f_par:43,f_svfn:44,f_ladn:45,e_lv0:46,e_lv1:47,w_osc:26,w_pos:27,w_lvl:28,w_cut:29,w_res:30,w_held:31,w_wt:32,v_on:19,v_mode:20,v_comp:21,v_noise:22,v_wow:23,v_in:24,v_gr:25,screen:0,theme:1,playing:2,bpm:3,filter:4,nfilt:5,step:6,bar:7,barsper:8,sweep:9,res:10,cut:11,env:12,drv:13,fc:14,sel:15,popk:16,popm:17,boot:18};
 const now=()=>Math.floor(performance.now())+1000;
 // settings, remembered in this browser
-const SDEF={vol:0,lat:'interactive',dth:0,pth:'auto'};
+const SDEF={vol:0,lat:'interactive',dth:0,pth:'auto',pal:'alu'};
 const cfg=Object.assign({},SDEF);
 try{Object.assign(cfg,JSON.parse(localStorage.getItem('pyoko.settings')||'{}'))}catch(e){}
 const saveCfg=()=>{try{localStorage.setItem('pyoko.settings',JSON.stringify(cfg))}catch(e){}};
 let master=null;
 const volGain=()=>cfg.vol<=-40?0:10**(cfg.vol/20);
 const segOn=(id,v)=>$(id).querySelectorAll('button').forEach(b=>{const on=b.dataset.v===String(v);b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});
-function applyPage(){if(cfg.pth==='auto')document.documentElement.removeAttribute('data-theme');else document.documentElement.dataset.theme=cfg.pth;segOn('s-pth',cfg.pth)}
+function applyPage(){const r=document.documentElement;if(cfg.pth==='auto')r.removeAttribute('data-theme');else r.dataset.theme=cfg.pth;segOn('s-pth',cfg.pth);
+ if(cfg.pal==='alu')r.removeAttribute('data-pal');else r.dataset.pal=cfg.pal;$('s-pal').value=cfg.pal}
+// extra screen palettes: written at run time into a theme slot of the display's own table (gfx.c theme_t:
+// 11 RGB565 colors bg surf line dim ink accent warn + 4 lane colors, then ghost / glow / fps bytes, then the name)
+const SCR_PALS=[
+ {n:'SAKURA',   c:['#1a0f16','#24141e','#3a2230','#7a5068','#ffe6ef','#ff6fa5','#ffd36b','#ff6fa5','#7fd1ff','#ffd36b','#b8f28a']},
+ {n:'DEEP SEA', c:['#04121c','#082030','#103048','#2e6680','#d8f3ff','#29c4ff','#ffb347','#29c4ff','#5eead4','#ffb347','#f472b6']},
+ {n:'MATCHA',   c:['#e6ecd6','#dbe3c8','#c7d2ae','#7f8f6a','#1f2a18','#3f7d3a','#c2410c','#3f7d3a','#1f2a18','#c2410c','#6b5a2a']},
+ {n:'SYNTHWAVE',c:['#0d0221','#170734','#261447','#6b4f9e','#f5e9ff','#ff2a6d','#05d9e8','#ff2a6d','#05d9e8','#f9c80e','#b967ff']},
+ {n:'ICE',      c:['#00080f','#001522','#062436','#0f5d85','#7fd8ff','#e0f7ff','#ffcf5c','#7fd8ff','#7fd8ff','#7fd8ff','#7fd8ff'],glow:1},
+ {n:'SOLAR',    c:['#002b36','#073642','#0e4552','#586e75','#eee8d5','#cb4b16','#b58900','#268bd2','#2aa198','#b58900','#d33682']},
+ {n:'RISO',     c:['#f4efe6','#ebe4d7','#ddd3c2','#9a8f80','#1d3fbb','#ff48b0','#ff6c2f','#1d3fbb','#ff48b0','#00a95c','#ff6c2f']},
+ {n:'MONO',     c:['#000000','#0c0c0c','#1e1e1e','#5a5a5a','#ffffff','#ffffff','#bdbdbd','#ffffff','#ffffff','#ffffff','#ffffff']},
+];
+const rgb565=h=>{const v=parseInt(h.slice(1),16),r=v>>16,g=v>>8&255,b=v&255;return Math.round(r*31/255)<<11|Math.round(g*63/255)<<5|Math.round(b*31/255)};
+let thBase=0,thOrig=null,thSlot=-1;   // the display's theme table, its original bytes, the slot on screen
+function findThemes(e){const n=e.scr_n_themes(),dv=new DataView(e.memory.buffer),np=e.scr_theme_name(0);
+ for(let a=0;a+4<=dv.byteLength;a+=4)if(dv.getUint32(a,true)===np){const base=a-28;
+  if(n<2||dv.getUint32(base+32+28,true)===e.scr_theme_name(1)){thBase=base;thOrig=new Uint8Array(e.memory.buffer,base,32*n).slice();return}}}
 function applyVol(){$('s-vol').value=cfg.vol;$('s-volv').textContent=cfg.vol<=-40?'Off':(cfg.vol>0?'+':'')+cfg.vol+' dB';if(master)master.gain.setTargetAtTime(volGain(),master.context.currentTime,.02)}
-function setDispTheme(n){if(!sc)return;const nt=sc.e.scr_n_themes();themeN=((n%nt)+nt)%nt;sc.set(SS.theme,themeN);$('s-dth').value=themeN;cfg.dth=themeN;saveCfg()}
+function setDispTheme(n){if(!sc)return;const e=sc.e,nt=e.scr_n_themes(),tot=nt+(thOrig?SCR_PALS.length:0);themeN=((n%tot)+tot)%tot;
+ let slot=themeN;
+ if(thOrig){new Uint8Array(e.memory.buffer,thBase,thOrig.length).set(thOrig);
+  if(themeN>=nt){slot=thSlot===0?1:0;const P=SCR_PALS[themeN-nt],dv=new DataView(e.memory.buffer),a=thBase+32*slot;
+   P.c.forEach((h,i)=>dv.setUint16(a+2*i,rgb565(h),true));dv.setUint8(a+22,P.ghost|0);dv.setUint8(a+23,P.glow|0);dv.setUint8(a+24,P.fps|0)}}
+ if(slot===thSlot){sc.set(SS.theme,(slot+1)%nt);e.scr_frame(now())}   // same slot, new colors: make it redraw
+ sc.set(SS.theme,slot);thSlot=slot;$('s-dth').value=themeN;cfg.dth=themeN;saveCfg()}
 function syncSettings(){applyVol();segOn('s-lat',cfg.lat);$('s-latn').hidden=!ctx||cfg.lat===ctxLat;applyPage();if(sc)$('s-dth').value=themeN}
 let ctxLat=null;
 applyPage();
@@ -539,6 +568,7 @@ $('s-vol').addEventListener('input',()=>{cfg.vol=+$('s-vol').value;applyVol();sa
 $('s-lat').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;cfg.lat=b.dataset.v;saveCfg();syncSettings()});
 $('s-pth').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;cfg.pth=b.dataset.v;saveCfg();applyPage()});
 $('s-dth').addEventListener('change',()=>setDispTheme(+$('s-dth').value));
+$('s-pal').addEventListener('change',()=>{cfg.pal=$('s-pal').value;saveCfg();applyPage()});
 $('s-reset').addEventListener('click',()=>{Object.assign(cfg,SDEF);saveCfg();setDispTheme(SDEF.dth);syncSettings()});
 (async()=>{
  try{
@@ -554,7 +584,9 @@ $('s-reset').addEventListener('click',()=>{Object.assign(cfg,SDEF);saveCfg();set
    str:(w,t)=>{const m=new Uint8Array(e.memory.buffer,e.scr_buf(),96);m.fill(0);for(let i=0;i<Math.min(95,t.length);i++)m[i]=t.charCodeAt(i)&127;e.scr_str(w)},
    cstr:p=>{const m=new Uint8Array(e.memory.buffer);let s='';while(m[p])s+=String.fromCharCode(m[p++]);return s}};
   sc.set(SS.boot,1);sc.set(SS.screen,scrN);
-  $('s-dth').innerHTML=Array.from({length:e.scr_n_themes()},(_,i)=>`<option value="${i}">${sc.cstr(e.scr_theme_name(i))}</option>`).join('');
+  findThemes(e);
+  $('s-dth').innerHTML=Array.from({length:e.scr_n_themes()},(_,i)=>`<option value="${i}">${sc.cstr(e.scr_theme_name(i))}</option>`).join('')
+   +(thOrig?SCR_PALS.map((P,i)=>`<option value="${e.scr_n_themes()+i}">${P.n}</option>`).join(''):'');
   setDispTheme(cfg.dth|0);   // MODEL is lit at load: its FILTER screen
   knobs.forEach(k=>scrKnob(k,false));scrVinyl();scrWave();envFocus(eFocus);sc.set(SS.sweep,sweep?1:0);sc.set(SS.barsper,+$('auto').value);scrLanes();
   if(names.length)scrModel(cur<0?0:cur,false);
