@@ -628,9 +628,9 @@ static void scr_marbles(void)
     mod_foot();
 }
 
-/* TIDES: the four outputs scrolling as round LEDs over the FILTER screen's faint matrix, one colour each (the
- * footer's column colours; distinct fallbacks on single-hue themes), output 1 on top, the newest at the right */
-#define TD_SPAN 128                  /* values across the width (the page rebuilds all of them every frame) */
+/* TIDES: one cycle of the four outputs as round LEDs over the FILTER screen's faint matrix, one colour each
+ * (the footer's column colours; distinct fallbacks on single-hue themes), output 1 on top */
+#define TD_SPAN 128                  /* values across the width: one cycle, held until a Tides setting changes */
 #define TD_EVERY 2                   /* an LED on every 2nd one */
 static void scr_tides(void)
 {
