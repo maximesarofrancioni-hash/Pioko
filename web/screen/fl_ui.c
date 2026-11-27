@@ -406,14 +406,16 @@ static int env_level(int i, int seg, float t, int sy, int top, int bot)
     (void)sy;
     return bot - (int)(v * (float)(bot - top) + 0.5f);
 }
-/* ENV in the FILTER screen's style: the same LED matrix, each envelope a curve of round LEDs (the small
- * crosses of the filter responses) in its own colour. All three share one time axis (the longest fills the width). */
+/* ENV in the FILTER screen's style: the same LED matrix, one envelope at a time (the one selected for editing).
+ * Its curve is the round LEDs in its own colour over the dim infill; while a note sounds, the infill lights in
+ * the accent up to its live level. The last three columns are a meter: each envelope's live level in its colour. */
+#define ENV_COLS (NCOL - 4)              /* curve columns; one gap column, then the three meter columns */
 static void env_columns(int i, float k, uint8_t *out)
 {
-    int len[4], w = NCOL * 4;
+    int len[4], w = ENV_COLS * 4;
     len[0] = (int)(tw(M.e_a[i]) * k); len[1] = (int)(tw(M.e_d[i]) * k); len[3] = (int)(tw(M.e_r[i]) * k);
     len[2] = w - len[0] - len[1] - len[3];
-    for (int c = 0; c < NCOL; c++) {
+    for (int c = 0; c < ENV_COLS; c++) {
         int x = c * 4 + 2, seg = 0;
         while (seg < 3 && x >= len[seg]) { x -= len[seg]; seg++; }
         int n = len[seg] < 1 ? 1 : len[seg];
@@ -421,58 +423,72 @@ static void env_columns(int i, float k, uint8_t *out)
         out[c] = (uint8_t)(GB - env_level(i, seg, t, 0, GT, GB));
     }
 }
-/* one colour per envelope, as the filter responses: AMP (env 2) in the ink like the filter lab's curve,
- * FLT (env 1) in the second footer hue like the wavetable filters', E3 in the third. Single-hue themes
- * fall back to the accent and the warning colour, then to dim and line, so the three always differ. */
+/* n distinct colours: each takes its own footer hue if no earlier one has it, else the first free of
+ * ink, warn, accent, dim, line (single-hue themes; the accent last of the hues, as ENV lights its fill in it) */
+static void distinct_colours(uint16_t *out, const int *hue, int n)
+{
+    for (int i = 0; i < n; i++) {
+        const uint16_t cand[6] = { hue[i] < 0 ? T->ink : tk(hue[i]), T->ink, T->warn, T->accent, T->dim, T->line };
+        out[i] = cand[5];
+        for (int j = 0; j < 6; j++) {
+            bool used = false;
+            for (int u = 0; u < i; u++) if (out[u] == cand[j]) used = true;
+            if (!used) { out[i] = cand[j]; break; }
+        }
+    }
+}
+/* AMP (env 2) in the ink like the filter lab's curve, FLT (env 1) in the second footer hue like the
+ * wavetable filters', E3 in the third */
 static void env_colours(uint16_t col[3])
 {
-    const uint16_t flt[4] = { tk(1), T->accent, T->warn, T->dim };
-    const uint16_t e3[5] = { tk(2), T->warn, T->accent, T->dim, T->line };
-    col[1] = T->ink;
-    col[0] = flt[3];
-    for (int j = 0; j < 4; j++) if (flt[j] != col[1]) { col[0] = flt[j]; break; }
-    col[2] = e3[4];
-    for (int j = 0; j < 5; j++) if (e3[j] != col[1] && e3[j] != col[0]) { col[2] = e3[j]; break; }
+    const int hue[3] = { -1, 1, 2 };     /* AMP, FLT, E3 */
+    uint16_t c[3];
+    distinct_colours(c, hue, 3);
+    col[1] = c[0]; col[0] = c[1]; col[2] = c[2];
 }
 static void scr_env(void)
 {
     static const char *const NAME[3] = { "1 FILTERS", "2 AMP", "3 MOD" };
     static const char *const SHORT[3] = { "FLT", "AMP", "E3" };
-    const int f = M.e_focus % 3, order[3] = { f, (f + 1) % 3, (f + 2) % 3 };
+    const int f = M.e_focus % 3;
     uint16_t col[3];
     env_colours(col);
-    /* subtitle: the one in focus (and where env 3 goes when it is) */
+    /* subtitle: the one selected (and where env 3 goes when it is) */
     char b[48];
     snprintf(b, sizeof b, "%s  %s", NAME[f], f == 2 ? M.e_sub + (M.e_sub[0] == 'E' && M.e_sub[1] == '3' ? 3 : 0) : (M.e_ppg[f] ? "LINEAR" : "EXP"));
     int ly = mod_head_text("ENVELOPES", b);
-    /* each one's mode (Exp / Lin) at the end of the subtitle line */
-    for (int i = 0; i < 3; i++) gfx_text(M.e_ppg[i] ? "L" : "E", XR - 11 + i * 4, ly, col[i], 1);
-    /* legend FLT AMP E3, beside the title when it fits there (the subtitle can be long), else on the subtitle line */
+    /* the three as tabs beside the title (else on the subtitle line): the selected one in its colour and
+     * underlined, the others dim; each keeps its coloured LED, the key to the meter */
     int lw = 0;
     for (int e = 0; e < 3; e++) lw += 10 + gfx_text_w(SHORT[e], 1);
     int lx = XR + 1, lyy = 4 + gfx_text_w("ENVELOPES", 2) + 4 <= XR + 1 - lw ? 14 : ly;
     for (int e = 2; e >= 0; e--) {
-        lx -= gfx_text_w(SHORT[e], 1);
-        gfx_text(SHORT[e], lx, lyy, col[e], 1);
+        int tw_ = gfx_text_w(SHORT[e], 1);
+        lx -= tw_;
+        gfx_text(SHORT[e], lx, lyy, e == f ? col[e] : T->dim, 1);
+        if (e == f) gfx_rect(lx, lyy + 6, tw_ - 1, 1, col[e]);
         lx -= 5; led_round(lx + 1, lyy + 2, col[e]); lx -= 5;
     }
-    int n = 0;
-    for (int i = 0; i < 3; i++) { int m = tw(M.e_a[i]) + tw(M.e_d[i]) + tw(M.e_r[i]); if (m > n) n = m; }
-    float k = (float)(NCOL * 4 - NCOL * 4 / 5) / (float)(n ? n : 1);
-    uint8_t cv[3][NCOL];
-    for (int i = 0; i < 3; i++) env_columns(i, k, cv[i]);
+    int n = tw(M.e_a[f]) + tw(M.e_d[f]) + tw(M.e_r[f]);
+    float k = (float)(ENV_COLS * 4 - ENV_COLS * 4 / 5) / (float)(n ? n : 1);
+    uint8_t cv[NCOL];
+    env_columns(f, k, cv);
     const int top = GT, bot = GB;
-    /* the unlit matrix, faint */
-    for (int c = 0; c < NCOL; c++)
-        for (int y = bot; y >= top; y -= 4) gfx_px(4 + c * 4, y, T->line);
-    /* the curves, the one in focus on top */
-    for (int j = 2; j >= 0; j--) {
-        int e = order[j];
-        for (int c = 0; c < NCOL; c++) led_round(4 + c * 4, bot - (cv[e][c] > GH ? GH : cv[e][c]), col[e]);
+    int live = M.playing && M.e_lv[f] > 0 ? (bot - top) * M.e_lv[f] / 1000 : -1;
+    for (int c = 0; c < ENV_COLS; c++) {
+        int x = 4 + c * 4, cy = bot - (cv[c] > GH ? GH : cv[c]);
+        for (int y = bot; y >= top; y -= 4) {
+            if (y > cy + 2) gfx_rect(x - 1, y - 1, 2, 2, bot - y <= live ? T->accent : T->dim);
+            else if (y < cy - 2) gfx_px(x, y, T->line);
+        }
+        led_round(x, cy, col[f]);
     }
-    /* live levels at the right edge */
-    for (int i = 0; i < 3; i++)
-        if (M.playing && M.e_lv[i] > 0) led_round(W - 3, bot - (bot - top) * M.e_lv[i] / 1000, col[i]);
+    /* the meter: FLT AMP E3, each a faint column with its live level */
+    for (int e = 0; e < 3; e++) {
+        int x = 4 + (NCOL - 3 + e) * 4;
+        for (int y = bot; y >= top; y -= 4) gfx_px(x, y, T->line);
+        if (M.playing && M.e_lv[e] > 0) led_round(x, bot - (bot - top) * M.e_lv[e] / 1000, col[e]);
+    }
     char a[8], d[8], s[8], r[8];
     ms_text(a, sizeof a, M.e_a[f]); ms_text(d, sizeof d, M.e_d[f]); snprintf(s, sizeof s, "%d", M.e_s[f]); ms_text(r, sizeof r, M.e_r[f]);
     ui_footer("ATK", a, "DEC", d, "SUS", s, "REL", r);
@@ -612,24 +628,24 @@ static void scr_marbles(void)
     mod_foot();
 }
 
-/* TIDES: the four outputs scrolling, one colour each (the footer's column colours) */
+/* TIDES: the four outputs scrolling as round LEDs on the FILTER screen's 4 px matrix, one colour each (the
+ * footer's column colours; distinct fallbacks on single-hue themes), output 1 on top, the newest at the right */
 static void scr_tides(void)
 {
     mod_head();
     const int top = GT, bot = GB, cy = (top + bot) / 2;
+    const int hue[4] = { 0, 1, 2, 3 };
+    uint16_t col[4];
+    distinct_colours(col, hue, 4);
+    for (int c = 0; c < NCOL; c++)
+        for (int y = bot; y >= top; y -= 4) gfx_px(4 + c * 4, y, T->line);
     gfx_line(2, cy, W - 3, cy, T->line, true);
-    for (int ch = 3; ch >= 0; ch--) {
-        int py = -1;
-        for (int x = 0; x < 128; x++) {
-            int i = (M.td_n - 128 + x) & 127;
-            int y = cy - M.td[ch][i] * (bot - top) / 2 / 64;
-            int px = 2 + x * (W - 5) / 128;
-            static const int8_t kCol[4] = { 0, 1, 2, 2 };    /* ink, accent, dim, dim dotted */
-            uint16_t col = kCol[ch] == 0 ? T->ink : kCol[ch] == 1 ? T->accent : T->dim;
-            if (py >= 0) gfx_line(px - 1, py, px, y, col, ch == 3);
-            py = y;
+    for (int ch = 3; ch >= 0; ch--)
+        for (int c = 0; c < NCOL; c++) {
+            int i = (M.td_n - NCOL + c) & 127;
+            int y = cy - M.td[ch][i] * (bot - top - 4) / 2 / 64;
+            led_round(4 + c * 4, y, col[ch]);
         }
-    }
     mod_foot();
 }
 

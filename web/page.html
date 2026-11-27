@@ -84,7 +84,6 @@ canvas#scr{display:block;margin:0 auto;width:100%;aspect-ratio:150/112;image-ren
 .wgrid.one{grid-template-columns:1fr}
 .wgrid.three{grid-template-columns:repeat(3,minmax(0,1fr))}
 .wsec.focus{border-top-color:var(--led)}.wsec.focus h3{color:var(--ink)}
-#s-env .wsec:not(.focus) h3{color:var(--mute)}
 #e3dest{flex:1;min-height:40px;font-size:15px}
 .wgrid.one .knobs{grid-template-columns:repeat(8,minmax(0,1fr))}
 @media(max-width:760px){.wgrid.one .knobs{grid-template-columns:repeat(4,minmax(0,1fr))}}
@@ -253,7 +252,8 @@ dialog#settings h3{margin:14px 0 4px;font:700 15px/1 "Barlow Condensed",sans-ser
 
 
  <section class="sec" id="s-env" hidden>
-  <div class="wgrid three">
+  <div class="vrow"><span class="seg" id="esel"><button data-v="0">Env 1 · filters</button><button data-v="1" class="on">Env 2 · amp</button><button data-v="2">Env 3 · mod</button></span></div>
+  <div class="wgrid one">
    <div class="wsec"><h3>Env 1 · filters<span class="sp"></span><span class="seg emode" data-id="50"><button data-v="0" class="on">Exp</button><button data-v="1">Lin</button></span></h3><div class="knobs" id="wk-e1"></div></div>
    <div class="wsec"><h3>Env 2 · amp<span class="sp"></span><span class="seg emode" data-id="58"><button data-v="0" class="on">Exp</button><button data-v="1">Lin</button></span></h3><div class="knobs" id="wk-e2"></div></div>
    <div class="wsec"><h3>Env 3 · mod<span class="sp"></span><span class="seg emode" data-id="66"><button data-v="0" class="on">Exp</button><button data-v="1">Lin</button></span></h3><div class="knobs" id="wk-e3"></div>
@@ -762,10 +762,12 @@ function respWave(){if(!sc)return;const o=new Uint8Array(sc.e.memory.buffer,sc.e
   const kk=4*lr*.97;let pl=Cx(1,0);const w=f/fl;for(let j=0;j<4;j++)pl=cm(pl,Cx(1,w));const l=cm(cd(Cx(1,0),ca(pl,Cx(kk,0))),Cx(1+kk*comp,0));
   o[i]=dbPx(par?Cx((s.r+l.r)/2,(s.i+l.i)/2):cm(s,l))}}
 
-// the envelope in focus: brightest and filled on the screen, its section marked on the page
+// the envelope selected: the only one on the screen and on the page; the encoders edit it
 let eFocus=1;
-function envFocus(i){eFocus=i;['wk-e1','wk-e2','wk-e3'].forEach((id,j)=>$(id).closest('.wsec').classList.toggle('focus',j===i));sc&&sc.e.scr_env_focus(i)}
-['wk-e1','wk-e2','wk-e3'].forEach((id,j)=>$(id).closest('.wsec').addEventListener('pointerdown',()=>{if(eFocus!==j)envFocus(j)}));
+function envFocus(i){eFocus=i;['wk-e1','wk-e2','wk-e3'].forEach((id,j)=>$(id).closest('.wsec').hidden=j!==i);
+ $('esel').querySelectorAll('button').forEach(b=>{const on=+b.dataset.v===i;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});sc&&sc.e.scr_env_focus(i)}
+$('esel').addEventListener('click',e=>{const b=e.target.closest('button');if(b)envFocus(+b.dataset.v)});
+envFocus(eFocus);
 // mod matrix: slots 1-15 (16 is Env 3's route); ids 400 + slot*3 + (0 source, 1 destination, 2 amount)
 const MXS=[['—','-'],['LFO 1','LFO1'],['LFO 2','LFO2'],['LFO 3','LFO3'],['LFO 4','LFO4'],['Env 1 filt','ENV1'],['Env 2 amp','ENV2'],['Env 3','ENV3'],['Env 4','ENV4'],
  ['Wave env 1','WEN1'],['Wave env 2','WEN2'],['Wave env 3','WEN3'],['Velocity','VEL'],['Key','KEY'],['Mod wheel','MW'],['Pressure','PRES'],['Expression','EXPR'],
