@@ -349,7 +349,7 @@ dialog#settings h3{margin:14px 0 4px;font:700 15px/1 "Barlow Condensed",sans-ser
 <script id="wpresets" type="application/json">__WPRESETS__</script>
 <script id="wk" type="text/worklet">
 class FL extends AudioWorkletProcessor{
- constructor(){super();this.e=null;this.q=[];this.pos=32;this.last=-1;this.n=0;this.watch=0;this.port.onmessage=m=>this.msg(m.data);
+ constructor(){super();this.e=null;this.q=[];this.td=[];this.pos=32;this.last=-1;this.n=0;this.watch=0;this.port.onmessage=m=>this.msg(m.data);
   this.v=new VinylMR2(VDATA);this.vc={on:1,comp:64,noise:0,wow:0,mode:'firmware',gin:1,gout:1};this.vapply();
   this.iL=new Int32Array(128);this.iR=new Int32Array(128);this.oL=new Int32Array(128);this.oR=new Int32Array(128)}
  sov(){const e=this.e;this.port.postMessage({t:'sov',len:new Float32Array(e.memory.buffer,e.fl_smp_info(),10)[7],ov:Array.from(new Uint8Array(e.memory.buffer,e.fl_smp_overview(146),146))})}
@@ -362,7 +362,8 @@ class FL extends AudioWorkletProcessor{
   if(d.t==='init'){
    WebAssembly.instantiate(d.wasm,{}).then(r=>{
     const e=r.instance.exports;e._initialize();e.fl_init(sampleRate);
-    this.L=new Float32Array(e.memory.buffer,e.fl_left(),32);this.R=new Float32Array(e.memory.buffer,e.fl_right(),32);
+    this.L=new Float32Array(e.memory.buffer,e.fl_left(),32);this.T4=new Float32Array(e.memory.buffer,e.fl_mod_info()+96,4);   // Tides' four outputs (fl_mod_info() refreshes them)
+    this.R=new Float32Array(e.memory.buffer,e.fl_right(),32);
     this.WL=new Float32Array(e.memory.buffer,e.fl_wleft(),32);
     const m=new Uint8Array(e.memory.buffer),names=[];
     for(let i=0;i<e.fl_num_filters();i++){let p=e.fl_filter_name(i),s='';while(m[p])s+=String.fromCharCode(m[p++]);names.push(s)}
@@ -382,7 +383,7 @@ class FL extends AudioWorkletProcessor{
  process(_i,outs){
   const o=outs[0],l=o[0],r=o[1],w=outs[1]&&outs[1][0];if(!this.e)return true;
   for(let i=0;i<l.length;i++){
-   if(this.pos>=32){this.e.fl_render();this.pos=0}
+   if(this.pos>=32){this.e.fl_render();this.pos=0;this.e.fl_mod_info();this.td.push(this.T4[0],this.T4[1],this.T4[2],this.T4[3])}
    l[i]=this.L[this.pos];if(r)r[i]=this.R[this.pos];if(w)w[i]=this.WL[this.pos];this.pos++}
   const c=this.vc,nn=l.length;
   if(c.on&&nn<=128){
@@ -394,7 +395,7 @@ class FL extends AudioWorkletProcessor{
   }
   if(this.e.fl_changed())this.port.postMessage({t:'filt',i:this.e.fl_filter()});
   if(++this.n%8===0){this.port.postMessage({t:'cut',v:this.e.fl_cutoff()});
-   this.port.postMessage({t:'mods',a:Array.from(new Float32Array(this.e.memory.buffer,this.e.fl_mod_info(),30))});
+   this.port.postMessage({t:'mods',a:Array.from(new Float32Array(this.e.memory.buffer,this.e.fl_mod_info(),30)),td:this.td.splice(0)});
    {const si=Array.from(new Float32Array(this.e.memory.buffer,this.e.fl_smp_info(),28));this.port.postMessage({t:'smp',a:si});if(si[9])this.sov()}
    const e=this.e,o=this.watch|0,lv=new Float32Array(e.memory.buffer,e.fl_wave_live(),11),pos=lv[o],pw=lv[3+o];
    const mode=e.fl_wave_get(100+o*16),tab=e.fl_wave_get(101+o*16);
@@ -899,9 +900,30 @@ function scrMods(){if(!sc)return;
   mscreen('BEADS',`${q}  SEED ${sd}${bst.freeze?'  FREEZE':''}${bst.on?'':'  BYPASS'}`,[['TIME',Math.round(MKV('beads',1)*100)],['SIZE',Math.round(MKV('beads',2)*100)],['PIT',sgn(MKV('beads',4))],['WET',Math.round(MKV('beads',7)*100)]])}}
  if(scrN===9||scrN===11)modsInfo(lastMods||new Array(30).fill(0))
 let lastMods=null;
-function modsInfo(a){lastMods=a;if(!sc)return;
+// TIDES screen timebase: the outputs arrive after every 32-frame engine block. Output 1's period is measured
+// (rising crossings of the middle of its range, a range that forgets about 0.4 per second); one value in
+// `step` is kept, so the screen's 128 values span two cycles (all values when it is that fast). Without
+// crossings (stopped, AD / AR) the rate knob sets it. Cycles shorter than 1.5 s are triggered like a scope:
+// two cycles from a rising crossing are sent at once, each held at least 0.5 s, so a steady LFO stands
+// still; slower ones scroll.
+let tdPh=0,tdLo=0,tdHi=0,tdPrev=0,tdSince=0,tdPer=0,tdWin=null,tdHold=0;
+const tdPush=q=>sc.e.scr_tides_push(...q.map(x=>Math.round(x*63)));
+function tdFeed(td){const BR=ctx.sampleRate/32;
+ for(let i=0;i+3<td.length;i+=4){const v=td[i];tdSince++;if(tdHold>0)tdHold--;
+  tdLo=Math.min(v,tdLo+.0003);tdHi=Math.max(v,tdHi-.0003);const mid=(tdLo+tdHi)/2;
+  const trig=tdPrev<mid&&v>=mid&&tdHi-tdLo>.05&&tdSince>2;
+  if(trig){tdPer=tdPer?tdPer*.6+tdSince*.4:tdSince;tdSince=0}
+  tdPrev=v;
+  const live=tdPer&&tdSince<4*tdPer,per=live?tdPer:BR/Math.max(.01,MKV('tides',0)),step=Math.max(1,2*per/128);
+  const q=[td[i],td[i+1],td[i+2],td[i+3]];
+  if(live&&per<1.5*BR){                                   // triggered
+   if(!tdWin){if(!trig||tdHold>0)continue;tdWin=[];tdPh=step}
+   if(++tdPh<step)continue;tdPh-=step;tdWin.push(q);
+   if(tdWin.length===128){tdWin.forEach(tdPush);tdWin=null;tdHold=.5*BR}
+  }else{tdWin=null;if(++tdPh<step)continue;tdPh-=step;tdPush(q)}}}
+function modsInfo(a,td){lastMods=a;if(!sc)return;
  if(scrN===9){sc.e.scr_shift_state(a[0]|0,a[1]|0);const h=new Int8Array(sc.e.memory.buffer,sc.e.scr_shift_hist(),16);for(let i=0;i<16;i++)h[i]=a[2+i]<0?-1:Math.min(127,a[2+i])}
- if(scrN===6)sc.e.scr_tides_push(...[24,25,26,27].map(i=>Math.round(a[i]*63)));
+ if(scrN===6&&td)tdFeed(td);
  if(scrN===11){const lv=x=>Math.max(0,Math.min(100,Math.round((20*Math.log10(x+1e-6)+48)/48*100)));
   sc.e.scr_beads_state(Math.round(MKV('beads',1)*100),Math.round(MKV('beads',2)*100),Math.round(MKV('beads',5)*100),Math.round((MKV('beads',4)+24)/48*100),bst.freeze?1:0,lv(a[28]),bst.on?lv(a[29]):0)}}
 function marblesStep(mb){if(!sc)return;const r=[2,5,10][MSEG.mbrange[2]],lo=MSEG.mbrange[2]===2?-5:0,n=v=>Math.max(0,Math.min(255,Math.round((v-lo)/r*255)));
@@ -1016,7 +1038,7 @@ async function start(){
   else if(d.t==='step'){stepNow=(d.s-1+16)%16;if(sc){sc.set(SS.step,stepNow);sc.set(SS.bar,d.bar);const t=now();lanes.forEach((L,i)=>{if(d.s>0&&hit(L,stepNow)&&!(i<4&&mute[i]))sc.e.scr_trig(i,t)})}document.querySelectorAll('.pat,.wpat').forEach(p=>{[...p.children].forEach((c,s)=>c.classList.toggle('cur',s===stepNow))});waveTick(d.wh,d.wc);if(d.mb)marblesStep(d.mb)}
   else if(d.t==='wpts')wavePts(d.pts)
   else if(d.t==='wlive')waveLive(d)
-  else if(d.t==='mods')modsInfo(d.a)
+  else if(d.t==='mods')modsInfo(d.a,d.td)
   else if(d.t==='smp')smpInfo(d.a)
   else if(d.t==='sov')smpOv(d.ov,d.len)
   else if(d.t==='gr')showGR(d.g);
