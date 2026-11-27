@@ -389,8 +389,6 @@ static void ms_text(char *b, int n, int ms)
 {
     if (ms < 1000) snprintf(b, n, "%d", ms); else snprintf(b, n, "%d.%dS", ms / 1000, ms / 100 % 10);
 }
-/* Both envelopes share one time axis in the same graph zone as the FILTER spectrum (y 30..69):
- * env 2 (amp) solid in the ink, env 1 (filters) dotted in dim; the live levels in the accent. */
 /* osc440's Dadsr shapes: exponential mode attacks toward 1.3 (1.466 time constants, reaching 1 at the end),
  * decays and releases fall over 4.6 time constants; PPG mode is linear. One point per pixel. */
 static int env_level(int i, int seg, float t, int sy, int top, int bot)
@@ -408,26 +406,8 @@ static int env_level(int i, int seg, float t, int sy, int top, int bot)
     (void)sy;
     return bot - (int)(v * (float)(bot - top) + 0.5f);
 }
-static void env_curve(int i, int x0, int w, float k, int top, int bot, uint16_t col, bool dotted)
-{
-    int len[4];
-    len[0] = (int)(tw(M.e_a[i]) * k); len[1] = (int)(tw(M.e_d[i]) * k); len[3] = (int)(tw(M.e_r[i]) * k);
-    len[2] = w - len[0] - len[1] - len[3];
-    int x = x0, py = bot;
-    for (int seg = 0; seg < 4; seg++) {
-        int n = len[seg] < 1 ? 1 : len[seg];
-        for (int j = 1; j <= n; j++) {
-            int y = env_level(i, seg, (float)j / (float)n, 0, top, bot);
-            int xx = x + j;
-            if (!dotted || (xx & 1) == 0) gfx_line(xx - 1, py, xx, y, col, false);
-            py = y;
-        }
-        x += n;
-    }
-}
-/* ENV in the FILTER screen's style: the same LED matrix. The amp envelope is the filled curve, the filter
- * envelope round LEDs in the second colour; while a note sounds, the infill lights in the accent up to the
- * amp envelope's live level. Both share one time axis (the longer one fills the width). */
+/* ENV in the FILTER screen's style: the same LED matrix, each envelope a curve of round LEDs (the small
+ * crosses of the filter responses) in its own colour. All three share one time axis (the longest fills the width). */
 static void env_columns(int i, float k, uint8_t *out)
 {
     int len[4], w = NCOL * 4;
@@ -441,24 +421,18 @@ static void env_columns(int i, float k, uint8_t *out)
         out[c] = (uint8_t)(GB - env_level(i, seg, t, 0, GT, GB));
     }
 }
-/* three envelopes, told apart by the shape of their LEDs as well as their colour:
- *   AMP (env 2) - the filled curve: round LEDs in the ink, the matrix lit below it (accent up to the live level)
- *   FLT (env 1) - crosses (round LEDs) in the second colour
- *   E3  (env 3) - hollow squares in the third colour
- * All on one time axis; the longest fills the width. */
-static void led_ring(int x, int y, uint16_t c) { gfx_frame(x - 1, y - 1, 3, 3, c); }
-/* the two overlay envelopes, big enough to read over the filled one: a 5x5 plus and a 5x5 box,
- * each cut out of what is under it by a background halo */
-static void env_plus(int x, int y, uint16_t c) { gfx_rect(x - 3, y - 1, 7, 3, T->bg); gfx_rect(x - 1, y - 3, 3, 7, T->bg); gfx_rect(x - 2, y, 5, 1, c); gfx_rect(x, y - 2, 1, 5, c); }
-static void env_box(int x, int y, uint16_t c) { gfx_rect(x - 3, y - 3, 7, 7, T->bg); gfx_frame(x - 2, y - 2, 5, 5, c); }
-/* The envelope in focus (the one being edited) is drawn brightest and filled; the others step down in
- * brightness: the next one in the dim colour, the last one in the line colour. Each keeps its own mark
- * (AMP round LEDs, FLT +, E3 boxes) so they stay recognisable in any theme. */
-static void env_mark(int env, int x, int y, uint16_t c)
+/* one colour per envelope, as the filter responses: AMP (env 2) in the ink like the filter lab's curve,
+ * FLT (env 1) in the second footer hue like the wavetable filters', E3 in the third. Single-hue themes
+ * fall back to the accent and the warning colour, then to dim and line, so the three always differ. */
+static void env_colours(uint16_t col[3])
 {
-    if (env == 1) { gfx_rect(x - 2, y - 2, 5, 5, T->bg); led_round(x, y, c); }
-    else if (env == 0) env_plus(x, y, c);
-    else env_box(x, y, c);
+    const uint16_t flt[4] = { tk(1), T->accent, T->warn, T->dim };
+    const uint16_t e3[5] = { tk(2), T->warn, T->accent, T->dim, T->line };
+    col[1] = T->ink;
+    col[0] = flt[3];
+    for (int j = 0; j < 4; j++) if (flt[j] != col[1]) { col[0] = flt[j]; break; }
+    col[2] = e3[4];
+    for (int j = 0; j < 5; j++) if (e3[j] != col[1] && e3[j] != col[0]) { col[2] = e3[j]; break; }
 }
 static void scr_env(void)
 {
@@ -466,19 +440,21 @@ static void scr_env(void)
     static const char *const SHORT[3] = { "FLT", "AMP", "E3" };
     const int f = M.e_focus % 3, order[3] = { f, (f + 1) % 3, (f + 2) % 3 };
     uint16_t col[3];
-    col[order[0]] = T->ink; col[order[1]] = T->dim; col[order[2]] = T->line;
+    env_colours(col);
     /* subtitle: the one in focus (and where env 3 goes when it is) */
     char b[48];
     snprintf(b, sizeof b, "%s  %s", NAME[f], f == 2 ? M.e_sub + (M.e_sub[0] == 'E' && M.e_sub[1] == '3' ? 3 : 0) : (M.e_ppg[f] ? "LINEAR" : "EXP"));
     int ly = mod_head_text("ENVELOPES", b);
-    for (int i = 0; i < 3; i++) gfx_text(M.e_ppg[i] ? "L" : "E", XR - 11 + i * 4, 12, col[i], 1);
-    /* legend, brightest first */
-    int lx = XR + 1;
-    for (int k = 2; k >= 0; k--) {
-        int e = order[k];
+    /* each one's mode (Exp / Lin) at the end of the subtitle line */
+    for (int i = 0; i < 3; i++) gfx_text(M.e_ppg[i] ? "L" : "E", XR - 11 + i * 4, ly, col[i], 1);
+    /* legend FLT AMP E3, beside the title when it fits there (the subtitle can be long), else on the subtitle line */
+    int lw = 0;
+    for (int e = 0; e < 3; e++) lw += 10 + gfx_text_w(SHORT[e], 1);
+    int lx = XR + 1, lyy = 4 + gfx_text_w("ENVELOPES", 2) + 4 <= XR + 1 - lw ? 14 : ly;
+    for (int e = 2; e >= 0; e--) {
         lx -= gfx_text_w(SHORT[e], 1);
-        gfx_text(SHORT[e], lx, ly, col[e], 1);
-        lx -= 5; env_mark(e, lx + 1, ly + 2, col[e]); lx -= 5;
+        gfx_text(SHORT[e], lx, lyy, col[e], 1);
+        lx -= 5; led_round(lx + 1, lyy + 2, col[e]); lx -= 5;
     }
     int n = 0;
     for (int i = 0; i < 3; i++) { int m = tw(M.e_a[i]) + tw(M.e_d[i]) + tw(M.e_r[i]); if (m > n) n = m; }
@@ -486,25 +462,17 @@ static void scr_env(void)
     uint8_t cv[3][NCOL];
     for (int i = 0; i < 3; i++) env_columns(i, k, cv[i]);
     const int top = GT, bot = GB;
-    /* the focused one's fill: dim, lit in the accent up to its live level while it sounds */
-    int live = M.playing && M.e_lv[f] > 0 ? (bot - top) * M.e_lv[f] / 1000 : -1;
-    for (int c = 0; c < NCOL; c++) {
-        int x = 4 + c * 4, cy = bot - (cv[f][c] > GH ? GH : cv[f][c]);
-        for (int y = bot; y >= top; y -= 4) {
-            if (y > cy + 2) gfx_rect(x - 1, y - 1, 2, 2, bot - y <= live ? T->accent : T->dim);
-            else if (y < cy - 2) gfx_px(x, y, T->line);
-        }
+    /* the unlit matrix, faint */
+    for (int c = 0; c < NCOL; c++)
+        for (int y = bot; y >= top; y -= 4) gfx_px(4 + c * 4, y, T->line);
+    /* the curves, the one in focus on top */
+    for (int j = 2; j >= 0; j--) {
+        int e = order[j];
+        for (int c = 0; c < NCOL; c++) led_round(4 + c * 4, bot - (cv[e][c] > GH ? GH : cv[e][c]), col[e]);
     }
-    /* darkest first, so the brighter ones sit on top; the two others on alternate columns */
-    for (int c = 1; c < NCOL; c += 2) env_mark(order[2], 4 + c * 4, bot - (cv[order[2]][c] > GH ? GH : cv[order[2]][c]), col[order[2]]);
-    for (int c = 0; c < NCOL; c += 2) env_mark(order[1], 4 + c * 4, bot - (cv[order[1]][c] > GH ? GH : cv[order[1]][c]), col[order[1]]);
-    for (int c = 0; c < NCOL; c++) {
-        int y = bot - (cv[f][c] > GH ? GH : cv[f][c]);
-        if (f == 1) led_round(4 + c * 4, y, T->ink); else env_mark(f, 4 + c * 4, y, T->ink);
-    }
-    /* live levels at the right edge, in each one's brightness */
+    /* live levels at the right edge */
     for (int i = 0; i < 3; i++)
-        if (M.playing && M.e_lv[i] > 0) env_mark(i, W - 3, bot - (bot - top) * M.e_lv[i] / 1000, i == f ? T->accent : col[i]);
+        if (M.playing && M.e_lv[i] > 0) led_round(W - 3, bot - (bot - top) * M.e_lv[i] / 1000, col[i]);
     char a[8], d[8], s[8], r[8];
     ms_text(a, sizeof a, M.e_a[f]); ms_text(d, sizeof d, M.e_d[f]); snprintf(s, sizeof s, "%d", M.e_s[f]); ms_text(r, sizeof r, M.e_r[f]);
     ui_footer("ATK", a, "DEC", d, "SUS", s, "REL", r);

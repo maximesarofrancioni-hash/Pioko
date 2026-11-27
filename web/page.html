@@ -572,7 +572,8 @@ $('s-pal').addEventListener('change',()=>{cfg.pal=$('s-pal').value;saveCfg();app
 $('s-reset').addEventListener('click',()=>{Object.assign(cfg,SDEF);saveCfg();setDispTheme(SDEF.dth);syncSettings()});
 (async()=>{
  try{
-  const {instance:{exports:e}}=await WebAssembly.instantiate(await gunzip(SCR_GZ),{});
+  // the display's C library may list WASI calls it never makes while drawing; stub them
+  const {instance:{exports:e}}=await WebAssembly.instantiate(await gunzip(SCR_GZ),{wasi_snapshot_preview1:{fd_close:()=>0,fd_seek:()=>0,fd_write:()=>0}});
   e._initialize();e.scr_init();
   const W=e.scr_w(),H=e.scr_h();NCOL=e.scr_ncol();GH=e.scr_gh();
   // whole screen pixels only: the canvas is shown at an exact multiple of 200 x 150 device pixels, so every
