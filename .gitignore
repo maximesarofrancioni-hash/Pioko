@@ -11,3 +11,4 @@ host/render
 web/filterlab.wasm
 web/screen.wasm
 web/screen/gen/
+web/tides_view.wasm

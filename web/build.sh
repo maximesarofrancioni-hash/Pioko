@@ -2,6 +2,7 @@
 # Browser build of filter-lab: one self-contained web/filter-lab.html with
 #   - the engine (filter-lab + sst-filters, and osc440's TripleWaveGroup on the wave lane) -> filterlab.wasm
 #   - the open-mpk4 display (firmware gfx.c + boot, filter-lab screens in screen/fl_ui.c) -> screen.wasm
+#   - a second Tides 2 slope generator that draws the TIDES screen's cycle (tides_view/) -> tides_view.wasm
 #   - the SP-303 Vinyl Sim JS engine (vinyl_engine.js, vinyl_data.json)
 #   - osc440's presets (../osc440bridge/presets.json, made by ../osc440bridge/dump_presets.cpp)
 #   - Mutable Instruments Beads, Marbles, Tides 2 (pichenettes/eurorack + stmlib, MIT) and the shift register (mods/)
@@ -32,10 +33,12 @@ sed -e 's/^#define LCD_W 160/#define LCD_W 150/' -e 's/^#define LCD_H 80/#define
 cp $F/gfx.c screen/gen/gfx.c
 emcc -O2 -std=gnu11 -Iscreen/gen -I$F -I$F/ui screen/fl_ui.c screen/gen/gfx.c $F/ui/ui_boot.c -o screen.wasm \
   --no-entry -sSTANDALONE_WASM -sINITIAL_MEMORY=1048576 -sTOTAL_STACK=65536
+emcc -O2 -std=c++17 -fno-exceptions -I$E tides_view/tides_cycle.cc $E/tides2/poly_slope_generator.cc $E/tides2/resources.cc \
+  -o tides_view.wasm --no-entry -sSTANDALONE_WASM -sINITIAL_MEMORY=1048576 -sTOTAL_STACK=65536
 python3 - <<'PY'
 import base64, gzip
 z = lambda f: base64.b64encode(gzip.compress(open(f, 'rb').read(), 9)).decode()
-s = open('page.html').read().replace('__WASM__', z('filterlab.wasm')).replace('__SCR__', z('screen.wasm'))
+s = open('page.html').read().replace('__WASM__', z('filterlab.wasm')).replace('__SCR__', z('screen.wasm')).replace('__TDV__', z('tides_view.wasm'))
 s = s.replace('__VINYL_SRC__', open('vinyl_engine.js').read()).replace('__VINYL_DATA__', open('vinyl_data.json').read())
 s = s.replace('__WPRESETS__', open('../osc440bridge/presets.json').read().strip())
 open('filter-lab.html', 'w').write(s)
