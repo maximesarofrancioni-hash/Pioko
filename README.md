@@ -104,6 +104,23 @@ before flashing.
 
 sst-filters is GPL-3, so this project is GPL-3 too.
 
+## Browser version on a Pi 4
+
+For quick tests, the full browser version runs on a Pi 4 with Raspberry Pi OS
+(with desktop), with no build step and no DAC: sound comes out of the
+headphone jack or HDMI.
+
+```sh
+git clone https://github.com/maximesarofrancioni-hash/Pioko.git
+cd Pioko
+./pi/run-browser.sh             # full screen; Alt+F4 quits
+./pi/run-browser.sh --window    # in a window
+./pi/install-autostart.sh       # optional: start it at every desktop login
+```
+
+Press Play on the page. Pick the audio output from the speaker icon in the
+taskbar.
+
 ## Browser version
 
 Pages (Elektron-style keys): MODEL, EUCLID | SHIFT (Turing Machine-style register), MARBLES | PLAY, OSC, FLTR, ENV
