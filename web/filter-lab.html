@@ -1458,6 +1458,7 @@ $('s-reset').addEventListener('click',()=>{Object.assign(cfg,SDEF);saveCfg();set
     for(let i=0;i<64;i++){const f0=30*Math.pow(16000/30,i/64),f1=30*Math.pow(16000/30,(i+1)/64);
      let b0=Math.floor(f0/sr*2*n),b1=Math.max(b0+1,Math.ceil(f1/sr*2*n)),m=-200;for(let b=b0;b<b1&&b<n;b++)m=Math.max(m,spec[b]);
      out[i]=run?Math.max(0,Math.min(42,Math.round((m+100)/90*42))):0}}
+   if(scrN===6&&ctx)tdFrame();
    if(e.scr_frame(now())){const fb=new Uint8Array(e.memory.buffer,e.scr_fb(),W*H*2);
     for(let i=0,j=0;i<W*H;i++,j+=4){const c=fb[i*2]<<8|fb[i*2+1],r=c>>11&31,gg=c>>5&63,b=c&31;d[j]=r<<3|r>>2;d[j+1]=gg<<2|gg>>4;d[j+2]=b<<3|b>>2;d[j+3]=255}
     g.putImageData(img,0,0)}
@@ -1757,30 +1758,42 @@ function scrMods(){if(!sc)return;
   mscreen('BEADS',`${q}  SEED ${sd}${bst.freeze?'  FREEZE':''}${bst.on?'':'  BYPASS'}`,[['TIME',Math.round(MKV('beads',1)*100)],['SIZE',Math.round(MKV('beads',2)*100)],['PIT',sgn(MKV('beads',4))],['WET',Math.round(MKV('beads',7)*100)]])}}
  if(scrN===9||scrN===11)modsInfo(lastMods||new Array(30).fill(0))
 let lastMods=null;
-// TIDES screen timebase: the outputs arrive after every 32-frame engine block. Output 1's period is measured
-// (rising crossings of the middle of its range, a range that forgets about 0.4 per second); one value in
-// `step` is kept, so the screen's 128 values span two cycles (all values when it is that fast). Without
-// crossings (stopped, AD / AR) the rate knob sets it. Cycles shorter than 1.5 s are triggered like a scope:
-// two cycles from a rising crossing are sent at once, each held at least 0.5 s, so a steady LFO stands
-// still; slower ones scroll.
-let tdPh=0,tdLo=0,tdHi=0,tdPrev=0,tdSince=0,tdPer=0,tdWin=null,tdHold=0;
-const tdPush=q=>sc.e.scr_tides_push(...q.map(x=>Math.round(x*63)));
-function tdFeed(td){const BR=ctx.sampleRate/32;
- for(let i=0;i+3<td.length;i+=4){const v=td[i];tdSince++;if(tdHold>0)tdHold--;
-  tdLo=Math.min(v,tdLo+.0003);tdHi=Math.max(v,tdHi-.0003);const mid=(tdLo+tdHi)/2;
-  const trig=tdPrev<mid&&v>=mid&&tdHi-tdLo>.05&&tdSince>2;
-  if(trig){tdPer=tdPer?tdPer*.6+tdSince*.4:tdSince;tdSince=0}
-  tdPrev=v;
-  const live=tdPer&&tdSince<4*tdPer,per=live?tdPer:BR/Math.max(.01,MKV('tides',0)),step=Math.max(1,2*per/128);
-  const q=[td[i],td[i+1],td[i+2],td[i+3]];
-  if(live&&per<1.5*BR){                                   // triggered
-   if(!tdWin){if(!trig||tdHold>0)continue;tdWin=[];tdPh=step}
-   if(++tdPh<step)continue;tdPh-=step;tdWin.push(q);
-   if(tdWin.length===128){tdWin.forEach(tdPush);tdWin=null;tdHold=.5*BR}
-  }else{tdWin=null;if(++tdPh<step)continue;tdPh-=step;tdPush(q)}}}
+// TIDES screen, drawn like a scope. The four outputs arrive after every 32-frame engine block and go into a
+// ring (about 95 s). Output 1's rising crossings of the middle of its range (a range that widens at once and
+// narrows about 0.03 per second, so the trigger level holds still) are kept to a fraction of a block; their spacing is the period (the rate knob when there are
+// none: stopped, AD / AR). Every animation frame the screen's 128 values are rebuilt by interpolation over
+// two periods ending now, so the wave flows smoothly through the screen's fixed LED columns. Above 6 cycles a
+// second that would strobe, so the window starts at the latest crossing with two periods after it instead
+// (like a scope's trigger) and each LED eases toward its new value.
+const TDN=1<<17,TDM=TDN-1,tdBuf=[0,1,2,3].map(()=>new Float32Array(TDN));
+let tdN=0,tdLo=0,tdHi=0,tdPrev=0,tdLastX=-1,tdPer=0,tdT=0;const tdX=[];
+function tdFeed(td){
+ for(let i=0;i+3<td.length;i+=4){const v=td[i];
+  for(let c=0;c<4;c++)tdBuf[c][tdN&TDM]=td[i+c];
+  tdLo=Math.min(v,tdLo+2e-5);tdHi=Math.max(v,tdHi-2e-5);const mid=(tdLo+tdHi)/2;
+  if(tdN&&tdPrev<mid&&v>=mid&&tdHi-tdLo>.05){const x=tdN-1+(mid-tdPrev)/(v-tdPrev);
+   if(tdLastX>=0&&x-tdLastX>2){const d=x-tdLastX;tdPer=tdPer&&Math.abs(d-tdPer)<tdPer*.5?tdPer*.85+d*.15:d}
+   tdLastX=x;tdX.push(x);if(tdX.length>64)tdX.shift()}
+  tdPrev=v;tdN++}
+ tdT=performance.now()}
+let tdSpan=0;const tdShow=[0,1,2,3].map(()=>new Float32Array(128));
+function tdFrame(){if(!tdN)return;const BR=ctx.sampleRate/32;
+ const live=tdPer&&tdN-tdLastX<4*tdPer,per=live?tdPer:BR/Math.max(.01,MKV('tides',0));
+ // the span follows the period only when it moves by more than a fifth, so cycle-to-cycle wobble does not rescale
+ if(!tdSpan||Math.abs(2*per-tdSpan)>.2*tdSpan)tdSpan=2*per;
+ const span=Math.min(tdSpan,TDN-256),last=tdN-1;let t0=-1;
+ const trig=live&&per<BR/6;                       // faster than 6 cycles a second: rolling would strobe
+ if(trig)for(let k=tdX.length-1;k>=0;k--)if(tdX[k]+span<=last){t0=tdX[k];break}
+ if(t0<0){const end=Math.min(last,last-64+(performance.now()-tdT)/1000*BR);t0=end-span}   // ~46 ms behind, advancing smoothly
+ if(t0<tdN-TDN+2)t0=tdN-TDN+2;
+ // triggered: each LED eases a quarter of the way per frame, so a new (never quite equal) cycle morphs in
+ const k=trig?.25:1;
+ for(let j=0;j<128;j++){const t=t0+j*span/127,i0=Math.floor(t),f=t-i0,a=i0&TDM,b=(i0+1)&TDM;
+  for(let c=0;c<4;c++){const B=tdBuf[c];tdShow[c][j]+=(B[a]*(1-f)+B[b]*f-tdShow[c][j])*k}
+  sc.e.scr_tides_push(...tdShow.map(D=>Math.round(D[j]*63)))}}
 function modsInfo(a,td){lastMods=a;if(!sc)return;
  if(scrN===9){sc.e.scr_shift_state(a[0]|0,a[1]|0);const h=new Int8Array(sc.e.memory.buffer,sc.e.scr_shift_hist(),16);for(let i=0;i<16;i++)h[i]=a[2+i]<0?-1:Math.min(127,a[2+i])}
- if(scrN===6&&td)tdFeed(td);
+ if(td)tdFeed(td);
  if(scrN===11){const lv=x=>Math.max(0,Math.min(100,Math.round((20*Math.log10(x+1e-6)+48)/48*100)));
   sc.e.scr_beads_state(Math.round(MKV('beads',1)*100),Math.round(MKV('beads',2)*100),Math.round(MKV('beads',5)*100),Math.round((MKV('beads',4)+24)/48*100),bst.freeze?1:0,lv(a[28]),bst.on?lv(a[29]):0)}}
 function marblesStep(mb){if(!sc)return;const r=[2,5,10][MSEG.mbrange[2]],lo=MSEG.mbrange[2]===2?-5:0,n=v=>Math.max(0,Math.min(255,Math.round((v-lo)/r*255)));
