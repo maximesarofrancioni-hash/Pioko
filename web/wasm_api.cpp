@@ -1,11 +1,15 @@
-// C API for the browser build of filter-lab
-#include "../src/filterlab.h"
+// C API for the browser build: osc440's voice (two sst-filters models per voice) on a Euclidean lane, the
+// sampler, Marbles, Tides and Beads, on one 16th-note clock
 #include "wave/wave_lane.h"
+#include "synth/sst_filter.h"
 #include "mods/mods.h"
 #include <cmath>
 
 #include "../src/sampler.h"
-static FilterLab lab;
+static constexpr int kBlock = 32;   // frames per fl_render()
+// the sequencer clock: 16ths at `bpm`, resolved at block starts; step counts 1..16 after each tick, as
+// filter-lab's did (the page and the wave lane read it that way)
+static struct Clock { float bpm = 120.f; int step = 0, bar = 0; double toNext = 0.0; } clk;
 // the sampler's RAM: 2^21 mono frames (47.5 s at 44.1 kHz, 8 MB) in the page; on the Pi a static array too
 static constexpr int kSmpFrames = 1 << 21;
 static float smpRam[kSmpFrames];
@@ -14,7 +18,7 @@ static float smpInfo[32];
 static uint8_t smpOv[256];
 static WaveLane wave;
 static float wbuf[512];
-static float waveL[FilterLab::kBlock], waveR[FilterLab::kBlock];   // the wave lane alone, for its spectrum
+static float waveL[kBlock], waveR[kBlock];   // the wave lane alone, for its spectrum
 static int lastStep = -1, lastBar = -1;
 static float sampleRate = 44100.f;
 static mods::Shift shiftReg;
@@ -24,15 +28,15 @@ static mods::BeadsState beads;
 static float modInfo[40];
 static unsigned lastNoteOns = 0;
 static float applied[16];          // Tides offset applied per destination last block
-static float outL[FilterLab::kBlock], outR[FilterLab::kBlock];
+static float outL[kBlock], outR[kBlock];
 
 #define API extern "C" __attribute__((used, visibility("default")))
 
 API void fl_init(float sr)
 {
     sampleRate = sr;
-    lab.Init(sr); lab.barsPerFilter = 4; wave.Init(); lastStep = -1; lastBar = -1;
-    mods::MarblesInit(sr / FilterLab::kBlock);
+    clk = Clock(); wave.Init(); lastStep = -1; lastBar = -1;
+    mods::MarblesInit(sr / kBlock);
     mods::TidesInit();
     mods::BeadsInit();
     smp.Init(smpRam, kSmpFrames, sr); smp.MakeDemo();
@@ -43,22 +47,29 @@ struct Dest { int id; float range; };
 static const Dest kDest[] = {
     {-1, 0.f},                          // 0 off
     {105, 32.f}, {121, 32.f}, {137, 32.f},   // 1-3 osc 1-3 wave position
-    {7, 36.f}, {2, 36.f}, {4, 0.5f},    // 4 ladder cutoff, 5 SVF cutoff, 6 SVF morph
+    {7, 36.f}, {2, 36.f}, {3, 0.5f},    // 4 filter 2 cutoff, 5 filter 1 cutoff, 6 filter 1 resonance
     {107, 0.45f},                       // 7 osc 1 pulse width
-    {-1, 36.f},                         // 8 filter lab cutoff (semitones)
+    {8, 0.5f},                          // 8 filter 2 resonance
     {-1, 0.5f}, {-1, 0.5f}, {-1, 12.f}, {-1, 0.5f},    // 9-12 Beads time, size, pitch (semitones), density
 };
 static const int kNumDest = sizeof(kDest) / sizeof(kDest[0]);
 API void fl_render()
 {
-    lab.Render(outL, outR);
+    for (int i = 0; i < kBlock; ++i) outL[i] = outR[i] = 0.f;
+    clk.toNext -= kBlock;
+    if (clk.toNext <= 0.0)
+    {
+        if (clk.step >= 16) { clk.step = 0; ++clk.bar; }
+        ++clk.step;
+        clk.toNext += sampleRate * 60.0 / clk.bpm / 4.0;
+    }
     bool tick = false;
-    // the wave lane follows filter-lab's sequencer: each new 16th triggers it
-    int st = lab.Step(), bar = lab.Bar();
+    // each new 16th triggers the wave lane and the sampler
+    int st = clk.step, bar = clk.bar;
     if (st != lastStep || bar != lastBar)
     {
         lastStep = st; lastBar = bar;
-        double sp16 = sampleRate * 60.0 / lab.bpm / 4.0;
+        double sp16 = sampleRate * 60.0 / clk.bpm / 4.0;
         int step = (st + 15) % 16;
         wave.Tick(step, bar, sp16);
         smp.Tick(step, bar, sp16);
@@ -77,13 +88,13 @@ API void fl_render()
     mods::MarblesStep(marbles, tick);
     if (wave.mode == WaveLane::kMarbles)
     {
-        double sp16 = sampleRate * 60.0 / lab.bpm / 4.0;
+        double sp16 = sampleRate * 60.0 / clk.bpm / 4.0;
         for (int c = 0; c < 3; c += 2)          // t1 plays X1, t3 plays X3
             if (marbles.rise[c])
                 wave.ExternalNote(45 + 12 * wave.octave + (int)std::lround(marbles.x[c] * 12.f), c ? 0.75f : 0.9f, wave.gate * sp16);
     }
     // Tides, every block: the wave lane's notes are its gate (for AD / AR)
-    mods::TidesStep(tides, sampleRate / FilterLab::kBlock, wave.notesHeld > 0);
+    mods::TidesStep(tides, sampleRate / kBlock, wave.notesHeld > 0);
     float sum[16] = {0};
     for (int i = 0; i < 4; ++i)
         if (tides.dest[i] > 0 && tides.dest[i] < kNumDest)
@@ -92,13 +103,12 @@ API void fl_render()
         if (kDest[d].id >= 0 && std::fabs(sum[d] - applied[d]) > 1e-4f)
             wave.ModParam((uint16_t)kDest[d].id, sum[d]);
     for (int d = 0; d < kNumDest; ++d) applied[d] = sum[d];
-    lab.cutoffMod = sum[8];
-    for (int i = 0; i < FilterLab::kBlock; ++i) waveL[i] = waveR[i] = 0.f;
-    wave.Render(waveL, waveR, FilterLab::kBlock);
-    for (int i = 0; i < FilterLab::kBlock; ++i) { outL[i] += waveL[i]; outR[i] += waveR[i]; }
+    for (int i = 0; i < kBlock; ++i) waveL[i] = waveR[i] = 0.f;
+    wave.Render(waveL, waveR, kBlock);
+    for (int i = 0; i < kBlock; ++i) { outL[i] += waveL[i]; outR[i] += waveR[i]; }
     // the sampler: resamples the filter lab + wave lane mix, then plays into it (before Beads and the Vinyl Sim)
-    smp.Capture(outL, outR, FilterLab::kBlock);
-    smp.Render(outL, outR, FilterLab::kBlock);
+    smp.Capture(outL, outR, kBlock);
+    smp.Render(outL, outR, kBlock);
     // Beads on the mix, before the Vinyl Sim (which runs in the worklet)
     if (beads.on)
     {
@@ -107,11 +117,11 @@ API void fl_render()
         b.time = cl(b.time + sum[9]); b.size = cl(b.size + sum[10]);
         b.pitch = std::fmax(-24.f, std::fmin(24.f, b.pitch + sum[11])); b.density = cl(b.density + sum[12]);
         bool seed = beads.seed == 1 ? wave.noteOns != lastNoteOns : (beads.seed == 2 ? tick : false);
-        mods::BeadsProcess(b, outL, outR, FilterLab::kBlock, seed);
+        mods::BeadsProcess(b, outL, outR, kBlock, seed);
         beads.inLevel = b.inLevel; beads.outLevel = b.outLevel;
     }
     lastNoteOns = wave.noteOns;
-    for (int i = 0; i < FilterLab::kBlock; ++i)   // soft limit above 0.8 so the sum stays inside +-1
+    for (int i = 0; i < kBlock; ++i)   // soft limit above 0.8 so the sum stays inside +-1
     {
         float *p[2] = {&outL[i], &outR[i]};
         for (float *x : p)
@@ -123,32 +133,17 @@ API void fl_render()
 }
 API float *fl_left() { return outL; }
 API float *fl_right() { return outR; }
-API int fl_block() { return FilterLab::kBlock; }
+API int fl_block() { return kBlock; }
 
-API int fl_num_filters() { return lab.NumFilters(); }
-API const char *fl_filter_name(int i) { return lab.FilterNameAt(i); }
-API int fl_filter() { return lab.FilterIndex(); }
-API void fl_select(int i) { lab.SelectFilter(i); }
-API int fl_changed() { int c = lab.filterChanged; lab.filterChanged = false; return c; }
-
+// the sst-filters models filter 1 and 2 choose from (osc440 parameters 20 and 21)
+API int fl_num_filters() { return synth::SstFilter::models(); }
+API const char *fl_filter_name(int i) { return synth::SstFilter::model_name(i); }
 API void fl_set(int id, float v)
 {
-    switch (id)
-    {
-    case 0: lab.resonance = v; break;
-    case 1: lab.cutoffOffset = v; break;
-    case 2: lab.envAmount = v; break;
-    case 3: lab.drive = v; break;
-    case 4: lab.bpm = v; break;
-    case 5: lab.sweep = v > 0.5f; break;
-    case 6: lab.barsPerFilter = (int)v; break;
-    case 10: case 11: case 12: case 13: lab.mute[id - 10] = v > 0.5f; break;
-    }
+    if (id == 4) clk.bpm = v;   // tempo
 }
-API void fl_euclid(int lane, int steps, int hits, int rot) { lab.SetEuclid(lane, steps, hits, rot); }
-API int fl_step() { return lab.Step(); }
-API int fl_bar() { return lab.Bar(); }
-API float fl_cutoff() { return lab.CutoffHz(); }
+API int fl_step() { return clk.step; }
+API int fl_bar() { return clk.bar; }
 
 // ---- osc440 wave lane
 API float *fl_wbuf() { return wbuf; }

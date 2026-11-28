@@ -4,8 +4,8 @@
  * following its layout rules: status strip y 0..7, hero zone y 8..92, footer y 93..111: line 1 = the front panel encoders, line 2 = the 4 encoders under the screen with the four knob columns,
  * popups that take over the hero zone (enter 140 ms, hold 800 ms, exit 110 ms), afterglow on phosphor themes.
  *
- * Screens: HOME (model number + name, bar ring, lane pads), FILTER (live spectrum + cutoff marker),
- *          EUCLID (5 lanes x 16 steps), VINYL (the SP-303 Vinyl Sim on the master bus: platter, gain reduction). */
+ * Screens: FILTER (the voice's two sst-filters models: routing, names, combined response), VINYL (the SP-303
+ *          Vinyl Sim on the master bus: platter, gain reduction), and one per page of the instrument. */
 #include <string.h>
 #include <stdio.h>
 /* the firmware's board.h says 160 x 80; build.sh makes a copy with 150 x 112 (screen/gen) that gfx.c builds with too */
@@ -26,7 +26,7 @@ uint32_t ui_chord_flash;
 
 enum { SCR_FL_HOME, SCR_FL_FILTER, SCR_FL_EUCLID, SCR_FL_VINYL, SCR_FL_WAVE, SCR_FL_ENV, SCR_FL_LFO, SCR_FL_WFLT, SCR_FL_PLAY, SCR_FL_SHIFT, SCR_FL_MARBLES, SCR_FL_BEADS, SCR_FL_MATRIX, SCR_FL_SAMPLER, SCR_FL_N };
 enum { POP_OFF, POP_FL_KNOB, POP_FL_MODEL };
-enum { ENTER_MS = 140, HOLD_MS = 800, EXIT_MS = 110, LANES = 5, BINS = 64 };
+enum { ENTER_MS = 140, HOLD_MS = 800, EXIT_MS = 110, BINS = 64 };
 
 static uint16_t fb[W * H];
 static uint8_t glow[W * H / 4];
@@ -38,8 +38,6 @@ static struct {
     int res, cut, env, drv;          /* res x100, cut st, env %, drive dB x10 */
     int fc;                          /* current base cutoff, Hz */
     int sel;                         /* lane being edited */
-    int steps[LANES], hits[LANES], rot[LANES], mute[LANES];
-    uint32_t trig[LANES];
     uint8_t spec[BINS];              /* 0..42 px (no longer drawn) */
     uint8_t resp[2][64];             /* filter responses (0 filter lab, 1 osc440), one point per LED column, 0..GH px */
     char fam[40], var[40];           /* model name, split: family / variant */
@@ -80,27 +78,14 @@ static struct {
     int boot_on;
 } M;
 
-static const char *const LANE_NAME[LANES] = { "BASS", "LEAD", "STAB", "NOISE", "ACC" };
-static const char *const LANE_TAG[LANES] = { "BS", "LD", "ST", "NZ", "AC" };
-
-
-static bool hit(int l, int s)
-{
-    int n = M.steps[l], k = M.hits[l];
-    if (n <= 0 || k <= 0) return false;
-    int i = ((s + M.rot[l]) % n + n) % n;
-    return (i * k) % n < k;
-}
-
 /* ---------------------------------------------------------------- chrome */
 static void status(uint32_t now)
 {
-    static const char *const NAMES[SCR_FL_N] = { "HOME", "FILTER", "EUCLID", "VINYL", "WAVE", "ENV", "TIDES", "WT FLT", "PLAY", "SHIFT", "MARBLES", "BEADS", "MATRIX", "SAMPLER" };
+    static const char *const NAMES[SCR_FL_N] = { "", "", "", "VINYL", "WAVE", "ENV", "TIDES", "FILTER", "PLAY", "SHIFT", "MARBLES", "BEADS", "MATRIX", "SAMPLER" };
     char b[16];
     gfx_rect(0, 0, W, 7, T->bg);
     snprintf(b, sizeof b, "%02d", M.screen + 1); gfx_text(b, 2, 1, T->dim, 1);
     gfx_text(NAMES[M.screen], 12, 1, T->ink, 1);
-    snprintf(b, sizeof b, "F%02d/%02d", M.filter + 1, M.nfilt); gfx_text(b, 46, 1, tk(1), 1);
     int x = W - 2 - gfx_text_w("BPM", 1);
     gfx_text("BPM", x, 1, T->dim, 1);
     snprintf(b, sizeof b, "%d", M.bpm); x -= 2 + gfx_text_w(b, 1); gfx_text(b, x, 1, T->ink, 1);
@@ -109,9 +94,6 @@ static void status(uint32_t now)
     x -= 18;
     for (int i = 0; i < 4; i++)
         gfx_rect(x + i * 4, 2, 3, 3, i == beat && M.playing && early ? (i == 0 ? T->accent : T->ink) : T->line);
-    const char *mode = M.bars_per ? "AUTO" : "HOLD";
-    int cx = x - 4 - gfx_text_w(mode, 1);
-    gfx_text(mode, cx, 1, M.bars_per ? T->dim : T->warn, 1);
     gfx_rect(0, UI_STATUS_H - 1, W, 1, T->line);
 }
 
@@ -136,65 +118,7 @@ void ui_footer(const char *l0, const char *v0, const char *l1, const char *v1,
     gfx_rect(3 * W / 4 - 1, FOOT_Y + 2, 1, 15, T->line);
 }
 
-static void knob_footer(void)
-{
-    char r[8], c[8], e[8], d[8];
-    snprintf(r, sizeof r, "%d.%02d", M.res / 100, M.res % 100);
-    snprintf(c, sizeof c, "%+d", M.cut);
-    snprintf(e, sizeof e, "%d", M.env);
-    snprintf(d, sizeof d, "%+d", M.drv / 10);
-    ui_footer("RES", r, "CUT", c, "ENV", e, "DRV", d);
-}
-
-static void hz_text(char *b, int n, int hz)
-{
-    if (hz >= 10000) snprintf(b, n, "%dK", hz / 1000);
-    else if (hz >= 1000) snprintf(b, n, "%d.%dK", hz / 1000, hz / 100 % 10);
-    else snprintf(b, n, "%d", hz);
-}
-
-/* ---------------------------------------------------------------- HOME: model number, name, bar ring, lane pads */
-static void scr_home(uint32_t now)
-{
-    char b[24];
-    snprintf(b, sizeof b, "%02d", M.filter + 1);
-    gfx_text(b, 3, 11, T->ink, 6);
-    int nx = 3 + gfx_text_w(b, 6) + 4;
-    int sc = nx + gfx_text_w(M.fam, 2) <= 104 ? 2 : 1;
-    gfx_text(M.fam, nx, 11, T->ink, sc);
-    gfx_text(M.var, nx, 11 + 5 * sc + 3, T->dim, 1);
-    /* chip: auto/hold, like the track chip */
-    snprintf(b, sizeof b, M.bars_per ? "%dB" : "HLD", M.bars_per);
-    int cw = gfx_text_w(b, 1) + 3;
-    gfx_rect(nx, 33, cw, 7, tk(1)); gfx_text(b, nx + 2, 34, T->bg, 1);
-    gfx_text(M.sweep ? "SWEEP ON" : "SWEEP OFF", nx + cw + 4, 34, T->ink, 1);
-    char hz[12]; hz_text(hz, sizeof hz, M.fc);
-    snprintf(b, sizeof b, "FC %sHZ", hz); gfx_text(b, 3, 47, T->accent, 2);   /* what the filter is at now */
-    /* bar ring: 16 steps, the bar of this filter in the centre */
-    for (int k = 0; k < 16; k++) {
-        int x, y; gfx_ring_pt(128, 32, 17, 16, 49152, 65536, k, &x, &y);
-        gfx_rect(x - 1, y - 1, 2, 2, !M.playing ? T->line : k == M.step ? T->accent : k < M.step ? T->ink : T->line);
-    }
-    int per = M.bars_per ? M.bars_per : 1;
-    snprintf(b, sizeof b, "%d/%d", M.bars_per ? (M.bar % per) + 1 : M.bar + 1, M.bars_per ? per : 0);
-    if (!M.bars_per) snprintf(b, sizeof b, "%d", M.bar + 1);
-    gfx_text(b, 128 - (gfx_text_w(b, 1) >> 1), 28, T->ink, 1);
-    gfx_text("BAR", 128 - (gfx_text_w("BAR", 1) >> 1), 34, T->dim, 1);
-    /* lane pads: lit as they trigger */
-    for (int i = 0; i < LANES; i++) {
-        int x = i * 30 + 1, w = 28, y = 63, h = 25;
-        bool lit = M.playing && (int32_t)(now - M.trig[i]) < 110 && !M.mute[i];
-        if (lit) {
-            gfx_rect(x, y, w, h, T->surf); gfx_dither(x, y, w, h, T->line);
-            gfx_frame(x, y, w, h, T->accent);
-        } else gfx_frame(x, y, w, h, i == M.sel ? T->dim : T->line);
-        gfx_text(LANE_NAME[i], x + w / 2 - (gfx_text_w(LANE_NAME[i], 1) >> 1), y + h / 2 - 2,
-                 M.mute[i] ? T->line : lit ? T->accent : T->dim, 1);
-    }
-    knob_footer();
-}
-
-/* ---------------------------------------------------------------- FILTER: spectrum, cutoff marker */
+/* ---------------------------------------------------------------- filter graphs */
 static int fx_of(int hz)            /* 30 Hz .. 16 kHz, log, onto x 2..W-3 */
 {
     if (hz < 30) hz = 30;
@@ -232,55 +156,6 @@ static int mod_head_text(const char *title, const char *sub)
     return y;
 }
 
-static void scr_filter(void)
-{
-    char b[48];
-    int ly = mod_head_text(M.fam, M.var);
-    /* legend, right of the subtitle: the lab's curve (filled) and the wave lane's (osc440 SVF + ladder) */
-    gfx_rect(XR - 41, ly + 1, 3, 3, T->ink); gfx_text("LAB", XR - 36, ly, T->ink, 1);
-    led_round(XR - 16, ly + 2, tk(1)); gfx_text("WT", XR - 12 + 4, ly, tk(1), 1);
-    int cx = fx_of(M.fc);
-    resp_graph(M.resp[0], led_col(cx), T->accent, -1, 0);
-    /* the wave lane's filters over it: round LEDs in the second colour, no infill */
-    for (int i = 0; i < NCOL; i++) {
-        int h = M.resp[1][i] > GH ? GH : M.resp[1][i];
-        led_round(4 + i * 4, GB - h, tk(1));
-    }
-    char hz[12]; hz_text(hz, sizeof hz, M.fc);
-    snprintf(b, sizeof b, "%sHZ", hz);
-    int tw = gfx_text_w(b, 1), tx = cx + 3 + tw > W - 2 ? cx - 3 - tw : cx + 3;
-    gfx_rect(tx - 1, GT - 9, tw + 2, 7, T->bg);
-    gfx_text(b, tx, GT - 8, T->accent, 1);
-    knob_footer();
-}
-
-/* ---------------------------------------------------------------- EUCLID: 5 lanes x 16 steps */
-static void scr_euclid(void)
-{
-    char b[12];
-    for (int l = 0; l < LANES; l++) {
-        int y = 10 + l * 16, ch = 13;                          /* rows of 16 px, cells 13 px tall */
-        bool act = l == M.sel;
-        if (act) { gfx_rect(0, y + 3, 12, 7, tk(1)); gfx_text(LANE_TAG[l], 2, y + 4, T->bg, 1); }
-        else gfx_text(LANE_TAG[l], 2, y + 4, M.mute[l] ? T->line : T->dim, 1);
-        if (M.mute[l]) gfx_text("M", 14, y + 4, T->warn, 1);
-        for (int s = 0; s < 16; s++) {
-            int x = 18 + s * 6;
-            bool h = hit(l, s), now = M.playing && s == M.step;
-            if (h) gfx_rect(x, y, 5, ch, now ? T->accent : M.mute[l] ? T->line : act ? T->ink : T->dim);
-            else if (now) gfx_frame(x, y, 5, ch, T->accent);
-            else gfx_rect(x + 2, y + ch / 2, 1, 1, T->line);
-        }
-        snprintf(b, sizeof b, "%d/%d", M.hits[l], M.steps[l]);
-        gfx_text(b, XR - gfx_text_w(b, 1), y + 4, act ? T->ink : T->dim, 1);
-    }
-    char h[6], n[6], r[6];
-    int s = M.sel;
-    snprintf(h, sizeof h, "%d", M.hits[s]); snprintf(n, sizeof n, "%d", M.steps[s]); snprintf(r, sizeof r, "%d", M.rot[s]);
-    ui_footer("LN", LANE_TAG[s], "HIT", h, "STP", n, "ROT", r);
-}
-
-/* ---------------------------------------------------------------- VINYL: platter, mode, gain reduction meter */
 static void scr_vinyl(uint32_t now)
 {
     char b[24];
@@ -521,29 +396,30 @@ static void scr_lfo(void)
     ui_footer("RATE", r, "SHP", M.l_shape, "DLY", d, "PH", M.l_ph >= 0 && M.playing ? "RUN" : "-");
 }
 
-/* ---------------------------------------------------------------- WT FLT: the FILTER screen for osc440's filters:
- * live spectrum of the wave lane alone, ladder and SVF cutoff lines */
+/* ---------------------------------------------------------------- FILTER: the voice's two sst-filters models (osc440 filter 1 and 2): the routing as the title, each model's name
+ * in its colour (filter 1 dim while fully open, when osc440 leaves it out), the combined response as on the
+ * other filter graphs, each cutoff's column lit in its filter's colour and numbered at the top */
+static void mod_foot(void);
 static void scr_wflt(void)
 {
+    const int hue[2] = { 1, 2 };
+    uint16_t col[2];
+    distinct_colours(col, hue, 2);
+    gfx_text(M.f_par ? "PARALLEL" : "SERIES", 4, 10, T->ink, 2);
+    const bool open1 = M.f_svf_hz <= 0;
     char b[40];
-    const char *route = M.f_par ? "PARALLEL" : "SVF > LADDER";
-    int sc = 4 + gfx_text_w(route, 2) <= W - 4 ? 2 : 1;
-    gfx_text(route, 4, 10, T->ink, sc);
-    snprintf(b, sizeof b, "LADDER RES %d  DRIVE %d.%d", M.f_res, M.f_drv10 / 10, M.f_drv10 % 10);
-    gfx_text(b, 4, sc == 2 ? 22 : 17, T->dim, 1);
-    char hz[12];
-    int cx = fx_of(M.f_lad_hz), sx = M.f_svf_hz > 0 ? fx_of(M.f_svf_hz) : -100;
-    resp_graph(M.resp[1], led_col(cx), T->accent, M.f_svf_hz > 0 ? led_col(sx) : -1, tk(1));
-    if (M.f_svf_hz > 0) { gfx_rect(sx - 2, 29, 5, 7, T->bg); gfx_text("S", sx - 1, 30, tk(1), 1); }
-    hz_text(hz, sizeof hz, M.f_lad_hz);
-    snprintf(b, sizeof b, "%sHZ", hz);
-    int tw = gfx_text_w(b, 1), tx = cx + 3 + tw > W - 2 ? cx - 3 - tw : cx + 3;
-    gfx_rect(tx - 1, 29, tw + 2, 7, T->bg);
-    gfx_text(b, tx, 30, T->accent, 1);
-    char s[8], l[8], r[8], d[8];
-    snprintf(s, sizeof s, "%d", M.f_svf_note); snprintf(l, sizeof l, "%d", M.f_lad_note);
-    snprintf(r, sizeof r, "%d", M.f_res); snprintf(d, sizeof d, "%d.%d", M.f_drv10 / 10, M.f_drv10 % 10);
-    ui_footer("SVF", s, "LAD", l, "RES", r, "DRV", d);
+    snprintf(b, sizeof b, "1 %s", M.fam); gfx_text(b, 4, 22, open1 ? T->dim : col[0], 1);
+    snprintf(b, sizeof b, "2 %s", M.var); gfx_text(b, 4, 29, col[1], 1);
+    int c2 = led_col(fx_of(M.f_lad_hz)), c1 = open1 ? -1 : led_col(fx_of(M.f_svf_hz));
+    resp_graph(M.resp[1], c2, col[1], c1, col[0]);
+    for (int f = 0; f < 2; f++) {
+        int c = f ? c2 : c1;
+        if (c < 0) continue;
+        int x = 4 + c * 4;
+        gfx_rect(x - 2, GT - 1, 5, 7, T->bg);
+        gfx_text(f ? "2" : "1", x - 1, GT, col[f], 1);
+    }
+    mod_foot();
 }
 
 /* ---------------------------------------------------------------- PLAY: the wave lane - preset, chords, pattern */
@@ -785,11 +661,11 @@ static const char *const TERM[] = {
     "> MEM 4096K ............... OK",
     "> GFX 600X450 AMOLED X4 ... OK",
     "> AUDIO 44.1K / 32 ........ OK",
-    "> SST-FILTERS  27 MODELS .. OK",
     "> OSC440  16 VOICES ....... OK",
+    "> SST-FILTERS  2 X 27 ..... OK",
     "> MARBLES  TIDES  BEADS ... OK",
     "> SP-303 VINYL MR2 ........ OK",
-    "> EUCLID 5 + WAVE 1 ....... OK",
+    "> EUCLID  WAVE + SAMPLER .. OK",
     "> SAMPLER  RAM ............ OK",
     "",
     "READY.",
@@ -932,7 +808,6 @@ API void scr_init(void)
     M.theme_drawn = -1; M.bpm = 120; M.nfilt = 1; M.bars_per = 4; M.sweep = 1; M.res = 65; M.env = 100;
     M.fc = 440; M.boot_on = 1; M.sel = 1; M.v_on = 1; M.v_comp = 64; M.p_on = 1; M.p_steps = 16; M.e_focus = 1;
     strcpy(M.fam, "PYOKO");
-    for (int i = 0; i < LANES; i++) { M.steps[i] = 16; M.hits[i] = 4; }
 }
 API uint16_t *scr_fb(void) { return fb; }
 API int scr_w(void) { return W; }
@@ -1020,7 +895,7 @@ API void scr_set(int k, int v, uint32_t now)
     case S_ENV: M.env = v; break;
     case S_DRV: M.drv = v; break;
     case S_FC: M.fc = v; break;
-    case S_SEL: M.sel = (v % LANES + LANES) % LANES; break;
+    case S_SEL: M.sel = v; break;
     case S_POP_KNOB:                                 /* v = position 0..4096; kname/kval/kunit set before */
     case S_POP_MODEL: {
         int kind = k == S_POP_KNOB ? POP_FL_KNOB : POP_FL_MODEL;
@@ -1066,13 +941,6 @@ API void scr_set(int k, int v, uint32_t now)
     }
 }
 
-/* lane l: steps, hits, rotate, mute */
-API void scr_lane(int l, int n, int k, int r, int mute)
-{
-    if (l < 0 || l >= LANES) return;
-    M.steps[l] = n; M.hits[l] = k; M.rot[l] = r; M.mute[l] = mute;
-}
-API void scr_trig(int l, uint32_t now) { if (l >= 0 && l < LANES) M.trig[l] = now; }
 
 API int scr_frame(uint32_t now)
 {
@@ -1094,9 +962,6 @@ API int scr_frame(uint32_t now)
     else {
         gfx_rect(0, 0, W, H, T->bg);
         switch (M.screen) {
-        case SCR_FL_HOME: scr_home(now); break;
-        case SCR_FL_FILTER: scr_filter(); break;
-        case SCR_FL_EUCLID: scr_euclid(); break;
         case SCR_FL_VINYL: scr_vinyl(now); break;
         case SCR_FL_ENV: scr_env(); break;
         case SCR_FL_LFO: scr_tides(); break;

@@ -63,11 +63,13 @@ const std::vector<Field> kSvf = {
     NUM("cutoff", G::kParamSvfCutoff),       NUM("resonance", G::kParamSvfResonance),
     NUM("morph", G::kParamSvfMorph),         BOOL("bandpass", G::kParamSvfBandpass),
     NUM("env_amount", G::kParamSvfEnvAmount),
+    NUM("model", G::kParamFilter1Model),     // OSC440_SST_FILTERS: filter 1's sst model
 };
 const std::vector<Field> kLadder = {
     NUM("cutoff", G::kParamLadderCutoff),    NUM("resonance", G::kParamLadderResonance),
     NUM("drive", G::kParamDrive),            NUM("compensation", G::kParamCompensation),
     NUM("env_amount", G::kParamLadderEnvAmount), BOOL("oversample", G::kParamLadderOversample),
+    NUM("model", G::kParamFilter2Model),     // OSC440_SST_FILTERS: filter 2's sst model
 };
 const std::vector<Field> kControls = {
     NUM("mod_wheel", G::kParamModWheel), NUM("pressure", G::kParamPressure), NUM("expression", G::kParamExpression),

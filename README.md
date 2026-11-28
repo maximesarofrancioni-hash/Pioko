@@ -143,18 +143,26 @@ taskbar.
 
 ## Browser version
 
-Pages (Elektron-style keys): MODEL, EUCLID | SHIFT (Turing Machine-style register), MARBLES | PLAY, OSC, FLTR, ENV
-(osc440) | SAMPLER | TIDES (Tides 2, 4 outputs routed to osc440 / filter lab / Beads) | BEADS, VINYL. The Mutable
-Instruments code comes from pichenettes/eurorack (MIT), unmodified, via `web/mods/`; `build.sh` needs `MI=` pointing
-at a eurorack checkout with stmlib cloned into it.
+The browser version is a different instrument from the Pi kernel: osc440's voice (the 3rd Wave-style
+TripleWaveGroup, 16 voices) on a Euclidean lane, with **two sst-filters models per voice**, in series or parallel.
+Filter 1 sits in osc440's SVF place and filter 2 in its ladder's, with the same cutoff, resonance, envelope 1 amount
+and matrix destinations; each can be any of the 27 models the Pi kernel tours (`synth/sst_filter.cpp`). With them:
+the sampler, the shift register, Mutable Instruments Marbles, Tides 2 and Beads, and the SP-303 Vinyl Sim.
+
+Pages (Elektron-style keys): FILTER | SHIFT (Turing Machine-style register), MARBLES | PLAY, OSC, ENV (osc440) |
+SAMPLER | TIDES (Tides 2, 4 outputs routed to osc440's oscillators and filters or Beads), MATRIX | BEADS, VINYL.
+Tempo is in the header.
 
 The display is 150 x 112, shown at 4x on a 600 x 450 AMOLED. Its footer has two parameter lines: line 1 is what
 the four front panel encoders turn on the current page, line 2 the four encoders under the screen (the page maps eight
-parameters per page in `PAGES`; the panel under the display mirrors them). The engine parts: Filter lab, Wavetable (osc440's TripleWaveGroup on a sixth
-Euclidean lane, built from your pico-osc440 sources at 44.1 kHz via `web/wave/`) and Vinyl Sim (the decoded
-SP-303 program on the master bus). `web/build.sh` needs `LIBS_DIR`, `MPK4` and `OSC440` pointing at the checkouts.
+parameters per page in `PAGES`; the panel under the display mirrors them).
 
-`web/build.sh` (needs Emscripten) compiles the same engine to WebAssembly and writes one self-contained `filter-lab.html`, which runs in an AudioWorklet with the same controls as the serial keys.
+Sources: osc440 is in `third_party/pico-osc440`; built with `OSC440_SST_FILTERS` it uses the sst filters (without
+the flag it keeps its own SVF and ladder, so its RP2350 build is unchanged). The Mutable Instruments code comes from
+pichenettes/eurorack (MIT), unmodified, via `web/mods/` and `web/tides_view/`. `web/build.sh` (needs Emscripten)
+needs `LIBS_DIR` (sst-filters, sst-basic-blocks, simde), `MPK4` (open-mpk4) and `MI` (eurorack with stmlib cloned into
+it), compiles the engine, the display and the TIDES view to WebAssembly and writes one self-contained
+`web/filter-lab.html`, which runs in an AudioWorklet.
 
-A prebuilt `web/filter-lab.html` is checked in, so the browser version runs without the open-mpk4, pico-osc440 and
-eurorack checkouts: open it in a browser and press Play.
+A prebuilt `web/filter-lab.html` is checked in, so the browser version runs without any checkout: open it in a
+browser and press Play.

@@ -1,17 +1,18 @@
 #!/bin/sh
 # Browser build of filter-lab: one self-contained web/filter-lab.html with
-#   - the engine (filter-lab + sst-filters, and osc440's TripleWaveGroup on the wave lane) -> filterlab.wasm
+#   - the engine (osc440's TripleWaveGroup on the wave lane, with two sst-filters models per voice) -> filterlab.wasm
 #   - the open-mpk4 display (firmware gfx.c + boot, filter-lab screens in screen/fl_ui.c) -> screen.wasm
 #   - a second Tides 2 slope generator that draws the TIDES screen's cycle (tides_view/) -> tides_view.wasm
 #   - the SP-303 Vinyl Sim JS engine (vinyl_engine.js, vinyl_data.json)
 #   - osc440's presets (../osc440bridge/presets.json, made by ../osc440bridge/dump_presets.cpp)
 #   - Mutable Instruments Beads, Marbles, Tides 2 (pichenettes/eurorack + stmlib, MIT) and the shift register (mods/)
-# LIBS_DIR: sst-filters, sst-basic-blocks, simde    MPK4: open-mpk4 checkout    OSC440: pico-osc440 checkout
+# LIBS_DIR: sst-filters, sst-basic-blocks, simde    MPK4: open-mpk4 checkout
+# OSC440: pico-osc440 (default: the copy in ../third_party, built with OSC440_SST_FILTERS)
 # MI: pichenettes/eurorack checkout with stmlib cloned into it
 set -e
 L=${LIBS_DIR:-../libs}
 F=${MPK4:-../../open-mpk4}/firmware/src
-O=${OSC440:-../../pico-osc440}/src
+O=${OSC440:-../third_party/pico-osc440}/src
 E=${MI:-../../eurorack}
 MSRC="$E/marbles/random/t_generator.cc $E/marbles/random/x_y_generator.cc $E/marbles/random/output_channel.cc
       $E/marbles/random/lag_processor.cc $E/marbles/random/quantizer.cc $E/marbles/random/discrete_distribution_quantizer.cc
@@ -24,8 +25,8 @@ OSRC="$O/dsp/buffer.cpp $O/dsp/interpolate.cpp $O/synth/saw_osc.cpp $O/synth/saw
       $O/engine/voice_allocator.cpp $O/engine/voice_engine.cpp"
 # -Iwave first: wave/config/audio_config.h runs osc440 at 44.1 kHz instead of 48 kHz
 emcc -std=c++20 -O3 -msimd128 -msse4.1 -fno-exceptions -Wno-deprecated-enum-float-conversion \
-  -DTEST -Iwave -I$O -I$E -Imods -I$L/sst-filters/include -I$L/sst-basic-blocks/include -I$L/simde \
-  wasm_api.cpp wave/wave_lane.cpp mods/mods.cpp ../src/filterlab.cpp ../src/sampler.cpp $OSRC $MSRC -o filterlab.wasm \
+  -DTEST -DOSC440_SST_FILTERS -Iwave -I$O -I$E -Imods -I$L/sst-filters/include -I$L/sst-basic-blocks/include -I$L/simde \
+  wasm_api.cpp wave/wave_lane.cpp mods/mods.cpp ../src/sampler.cpp $O/synth/sst_filter.cpp $OSRC $MSRC -o filterlab.wasm \
   --no-entry -sSTANDALONE_WASM -sTOTAL_STACK=262144 -sINITIAL_MEMORY=50331648
 # the display: 150 x 112, shown at 4x on the 600 x 450 AMOLED (600 x 448). A copy of board.h and gfx.c with that size.
 mkdir -p screen/gen
