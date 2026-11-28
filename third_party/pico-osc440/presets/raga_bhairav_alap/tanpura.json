@@ -1,0 +1,143 @@
+{
+  "format": "osc440-preset",
+  "version": 1,
+  "name": "tanpura",
+  "description": "From demo/showcase.cpp, raga_bhairav_alap",
+  "global": {
+    "level": 0.28,
+    "wave_scan": "smooth",
+    "filter_routing": "series",
+    "key_track": 0.5,
+    "pan": 0
+  },
+  "svf": {
+    "cutoff": 135,
+    "resonance": 0,
+    "morph": 0,
+    "bandpass": false,
+    "env_amount": 0
+  },
+  "ladder": {
+    "cutoff": 90,
+    "resonance": 0.15,
+    "drive": 1,
+    "compensation": 0.5,
+    "env_amount": 12,
+    "oversample": true
+  },
+  "controls": {
+    "mod_wheel": 0,
+    "pressure": 0,
+    "expression": 0
+  },
+  "oscillators": [
+    {
+      "mode": "wavetable",
+      "table": "plaits_a",
+      "tune": 0,
+      "fine": 0,
+      "level": 0.5,
+      "wave": 14,
+      "wave_env_amount": 10,
+      "pw": 0.5,
+      "fm": 0,
+      "sync": false
+    }, {
+      "mode": "saw",
+      "table": "basic",
+      "tune": 0,
+      "fine": 0,
+      "level": 0.25,
+      "wave": 0,
+      "wave_env_amount": 0,
+      "pw": 0.5,
+      "fm": 0,
+      "sync": false
+    }, {
+      "mode": "saw",
+      "table": "basic",
+      "tune": 12,
+      "fine": 3,
+      "level": 0.1,
+      "wave": 0,
+      "wave_env_amount": 0,
+      "pw": 0.5,
+      "fm": 0,
+      "sync": false
+    }
+  ],
+  "wave_envelopes": [
+    {
+      "stages": [{"level": 1, "time": 2.5}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 0, "time": 0.3}],
+      "loop_start": 1,
+      "loop_end": 0
+    },
+    {
+      "stages": [{"level": 1, "time": 0.5}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 0, "time": 0.3}],
+      "loop_start": 1,
+      "loop_end": 0
+    },
+    {
+      "stages": [{"level": 1, "time": 0.5}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 0, "time": 0.3}],
+      "loop_start": 1,
+      "loop_end": 0
+    }
+  ],
+  "envelopes": [
+    {
+      "mode": "exponential",
+      "delay": 0,
+      "attack": 0.005,
+      "decay": 1.5,
+      "sustain": 0.3,
+      "release": 2
+    }, {
+      "mode": "exponential",
+      "delay": 0,
+      "attack": 0.004,
+      "decay": 5,
+      "sustain": 0,
+      "release": 4
+    }, {
+      "mode": "exponential",
+      "delay": 0,
+      "attack": 0.2,
+      "decay": 0.5,
+      "sustain": 0.5,
+      "release": 0.5
+    }, {
+      "mode": "exponential",
+      "delay": 0,
+      "attack": 1,
+      "decay": 1,
+      "sustain": 1,
+      "release": 1
+    }
+  ],
+  "lfos": [
+    {
+      "rate": 1,
+      "shape": "sine",
+      "reset": false,
+      "delay": 0
+    }, {
+      "rate": 0.3,
+      "shape": "smooth_random",
+      "reset": false,
+      "delay": 0
+    }, {
+      "rate": 3,
+      "shape": "sine",
+      "reset": false,
+      "delay": 0
+    }, {
+      "rate": 4,
+      "shape": "sine",
+      "reset": false,
+      "delay": 0
+    }
+  ],
+  "matrix": [
+    {"slot": 0, "source": "lfo2", "destination": "wave1", "amount": 6}
+  ]
+}

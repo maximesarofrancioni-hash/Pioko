@@ -1,0 +1,42 @@
+; I2S master transmitter: 32-bit slots, MSB first, two PIO cycles per BCLK.
+; Side-set bit 0 = BCLK, bit 1 = LRCK. Data changes while BCLK is low and is
+; stable on its rising edge; LRCK changes one BCLK before the MSB (Philips I2S).
+; Each 32-bit FIFO word is one channel: words alternate left, right.
+; (Same structure as the audio_i2s program in pico-extras.)
+
+.program i2s_out
+.side_set 2
+
+bitloop1:                       ; right channel (LRCK high)
+    out pins, 1       side 0b10
+    jmp x-- bitloop1  side 0b11
+    out pins, 1       side 0b00 ; last bit: LRCK already low for the next word
+public entry_point:
+    set x, 30         side 0b01
+
+bitloop0:                       ; left channel (LRCK low)
+    out pins, 1       side 0b00
+    jmp x-- bitloop0  side 0b01
+    out pins, 1       side 0b10 ; last bit: LRCK already high for the next word
+    set x, 30         side 0b11
+
+% c-sdk {
+static inline void i2s_out_program_init(PIO pio, uint sm, uint offset,
+                                        uint pin_data, uint pin_bclk, float clkdiv) {
+    pio_sm_config c = i2s_out_program_get_default_config(offset);
+    sm_config_set_out_pins(&c, pin_data, 1);
+    sm_config_set_sideset_pins(&c, pin_bclk);              // BCLK, LRCK = pin_bclk + 1
+    sm_config_set_out_shift(&c, false, true, 32);          // MSB first, autopull 32 bits
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
+    sm_config_set_clkdiv(&c, clkdiv);
+
+    pio_gpio_init(pio, pin_data);
+    pio_gpio_init(pio, pin_bclk);
+    pio_gpio_init(pio, pin_bclk + 1);
+    pio_sm_set_consecutive_pindirs(pio, sm, pin_data, 1, true);
+    pio_sm_set_consecutive_pindirs(pio, sm, pin_bclk, 2, true);
+
+    // Start before bitloop0, so the first word in the FIFO goes out as left
+    pio_sm_init(pio, sm, offset + i2s_out_offset_entry_point, &c);
+}
+%}

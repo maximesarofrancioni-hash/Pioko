@@ -1,0 +1,145 @@
+{
+  "format": "osc440-preset",
+  "version": 1,
+  "name": "sitar",
+  "description": "From demo/showcase.cpp, raga_yaman_gat_teentaal",
+  "global": {
+    "level": 0.38,
+    "wave_scan": "smooth",
+    "filter_routing": "series",
+    "key_track": 0.5,
+    "pan": 0.15
+  },
+  "svf": {
+    "cutoff": 135,
+    "resonance": 0,
+    "morph": 0,
+    "bandpass": false,
+    "env_amount": 0
+  },
+  "ladder": {
+    "cutoff": 68,
+    "resonance": 0.35,
+    "drive": 1.8,
+    "compensation": 0.5,
+    "env_amount": 46,
+    "oversample": true
+  },
+  "controls": {
+    "mod_wheel": 0,
+    "pressure": 0,
+    "expression": 0
+  },
+  "oscillators": [
+    {
+      "mode": "wavetable",
+      "table": "plaits_a",
+      "tune": 0,
+      "fine": 0,
+      "level": 0.45,
+      "wave": 30,
+      "wave_env_amount": 0,
+      "pw": 0.5,
+      "fm": 0,
+      "sync": false
+    }, {
+      "mode": "saw",
+      "table": "basic",
+      "tune": 0,
+      "fine": 0,
+      "level": 0.35,
+      "wave": 0,
+      "wave_env_amount": 0,
+      "pw": 0.5,
+      "fm": 0,
+      "sync": false
+    }, {
+      "mode": "pulse",
+      "table": "basic",
+      "tune": 12,
+      "fine": 0,
+      "level": 0.12,
+      "wave": 0,
+      "wave_env_amount": 0,
+      "pw": 0.12,
+      "fm": 0,
+      "sync": false
+    }
+  ],
+  "wave_envelopes": [
+    {
+      "stages": [{"level": 1, "time": 0.5}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 0, "time": 0.3}],
+      "loop_start": 1,
+      "loop_end": 0
+    },
+    {
+      "stages": [{"level": 1, "time": 0.5}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 0, "time": 0.3}],
+      "loop_start": 1,
+      "loop_end": 0
+    },
+    {
+      "stages": [{"level": 1, "time": 0.5}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 0, "time": 0.3}],
+      "loop_start": 1,
+      "loop_end": 0
+    }
+  ],
+  "envelopes": [
+    {
+      "mode": "exponential",
+      "delay": 0,
+      "attack": 0.001,
+      "decay": 0.25,
+      "sustain": 0.15,
+      "release": 0.3
+    }, {
+      "mode": "exponential",
+      "delay": 0,
+      "attack": 0.001,
+      "decay": 1.6,
+      "sustain": 0,
+      "release": 0.6
+    }, {
+      "mode": "exponential",
+      "delay": 0,
+      "attack": 0.2,
+      "decay": 0.5,
+      "sustain": 0.5,
+      "release": 0.5
+    }, {
+      "mode": "exponential",
+      "delay": 0,
+      "attack": 1,
+      "decay": 1,
+      "sustain": 1,
+      "release": 1
+    }
+  ],
+  "lfos": [
+    {
+      "rate": 5.5,
+      "shape": "sine",
+      "reset": false,
+      "delay": 0.4
+    }, {
+      "rate": 2,
+      "shape": "sine",
+      "reset": false,
+      "delay": 0
+    }, {
+      "rate": 3,
+      "shape": "sine",
+      "reset": false,
+      "delay": 0
+    }, {
+      "rate": 4,
+      "shape": "sine",
+      "reset": false,
+      "delay": 0
+    }
+  ],
+  "matrix": [
+    {"slot": 0, "source": "lfo1", "destination": "pitch1", "amount": 0.08},
+    {"slot": 1, "source": "lfo1", "destination": "pitch2", "amount": 0.08},
+    {"slot": 2, "source": "lfo1", "destination": "pitch3", "amount": 0.08}
+  ]
+}

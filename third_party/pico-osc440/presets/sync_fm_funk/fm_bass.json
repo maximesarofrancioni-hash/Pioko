@@ -1,0 +1,141 @@
+{
+  "format": "osc440-preset",
+  "version": 1,
+  "name": "fm bass",
+  "description": "From demo/showcase.cpp, sync_fm_funk",
+  "global": {
+    "level": 0.3,
+    "wave_scan": "smooth",
+    "filter_routing": "series",
+    "key_track": 0.5,
+    "pan": 0
+  },
+  "svf": {
+    "cutoff": 135,
+    "resonance": 0,
+    "morph": 0,
+    "bandpass": false,
+    "env_amount": 0
+  },
+  "ladder": {
+    "cutoff": 74,
+    "resonance": 0,
+    "drive": 1,
+    "compensation": 0.5,
+    "env_amount": 22,
+    "oversample": true
+  },
+  "controls": {
+    "mod_wheel": 0,
+    "pressure": 0,
+    "expression": 0
+  },
+  "oscillators": [
+    {
+      "mode": "sine",
+      "table": "basic",
+      "tune": 12,
+      "fine": 0,
+      "level": 0,
+      "wave": 0,
+      "wave_env_amount": 0,
+      "pw": 0.5,
+      "fm": 0,
+      "sync": false
+    }, {
+      "mode": "sine",
+      "table": "basic",
+      "tune": 0,
+      "fine": 0,
+      "level": 0.7,
+      "wave": 0,
+      "wave_env_amount": 0,
+      "pw": 0.5,
+      "fm": 1,
+      "sync": false
+    }, {
+      "mode": "sine",
+      "table": "basic",
+      "tune": -12,
+      "fine": 0,
+      "level": 0.35,
+      "wave": 0,
+      "wave_env_amount": 0,
+      "pw": 0.5,
+      "fm": 0,
+      "sync": false
+    }
+  ],
+  "wave_envelopes": [
+    {
+      "stages": [{"level": 1, "time": 0.5}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 0, "time": 0.3}],
+      "loop_start": 1,
+      "loop_end": 0
+    },
+    {
+      "stages": [{"level": 1, "time": 0.5}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 0, "time": 0.3}],
+      "loop_start": 1,
+      "loop_end": 0
+    },
+    {
+      "stages": [{"level": 1, "time": 0.5}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 1, "time": 0}, {"level": 0, "time": 0.3}],
+      "loop_start": 1,
+      "loop_end": 0
+    }
+  ],
+  "envelopes": [
+    {
+      "mode": "exponential",
+      "delay": 0,
+      "attack": 0.001,
+      "decay": 0.15,
+      "sustain": 0,
+      "release": 0.1
+    }, {
+      "mode": "exponential",
+      "delay": 0,
+      "attack": 0.001,
+      "decay": 0.25,
+      "sustain": 0.4,
+      "release": 0.06
+    }, {
+      "mode": "exponential",
+      "delay": 0,
+      "attack": 0.2,
+      "decay": 0.5,
+      "sustain": 0.5,
+      "release": 0.5
+    }, {
+      "mode": "exponential",
+      "delay": 0,
+      "attack": 1,
+      "decay": 1,
+      "sustain": 1,
+      "release": 1
+    }
+  ],
+  "lfos": [
+    {
+      "rate": 1,
+      "shape": "sine",
+      "reset": false,
+      "delay": 0
+    }, {
+      "rate": 2,
+      "shape": "sine",
+      "reset": false,
+      "delay": 0
+    }, {
+      "rate": 3,
+      "shape": "sine",
+      "reset": false,
+      "delay": 0
+    }, {
+      "rate": 4,
+      "shape": "sine",
+      "reset": false,
+      "delay": 0
+    }
+  ],
+  "matrix": []
+}
