@@ -24,7 +24,7 @@
 const theme_t *T = &EMBER;          /* the theme of the frame being drawn (ui_boot.c reads it) */
 uint32_t ui_chord_flash;
 
-enum { SCR_FL_HOME, SCR_FL_FILTER, SCR_FL_EUCLID, SCR_FL_VINYL, SCR_FL_WAVE, SCR_FL_ENV, SCR_FL_LFO, SCR_FL_WFLT, SCR_FL_PLAY, SCR_FL_SHIFT, SCR_FL_MARBLES, SCR_FL_BEADS, SCR_FL_MATRIX, SCR_FL_SAMPLER, SCR_FL_N };
+enum { SCR_FL_HOME, SCR_FL_FILTER, SCR_FL_EUCLID, SCR_FL_VINYL, SCR_FL_WAVE, SCR_FL_ENV, SCR_FL_LFO, SCR_FL_WFLT, SCR_FL_PLAY, SCR_FL_SHIFT, SCR_FL_MARBLES, SCR_FL_BEADS, SCR_FL_MATRIX, SCR_FL_SAMPLER, SCR_FL_FX, SCR_FL_SAMP_AMP, SCR_FL_N };
 enum { POP_OFF, POP_FL_KNOB, POP_FL_MODEL };
 enum { ENTER_MS = 140, HOLD_MS = 800, EXIT_MS = 110, BINS = 64 };
 
@@ -60,6 +60,8 @@ static struct {
     uint8_t mb_t[32], mb_x1[32], mb_x3[32]; int mb_n;          /* per 16th: t1|t3<<1, X in 0..255 */
     int8_t td[4][128]; int td_n;                                /* Tides outputs, -64..63 */
     int b_time, b_size, b_dens, b_pitch, b_freeze, b_in, b_out; /* Beads, 0..100 */
+    int fx_bon;                      /* FX: Beads on (the Vinyl Sim's is v_on) */
+    int sa_atk, sa_dec, sa_lvl, sa_fenv, sa_fdec;   /* the sampler track's AMP: attack, decay ms (0 hold), level %, filter env st, its decay ms */
     char mx_txt[10][16]; int mx_amt[10], mx_n, mx_focus;         /* MATRIX: up to 10 rows, amount -1000..1000 */
     /* ENV: per envelope attack/decay/release ms, sustain %, live level 0..1000 */
     int e_a[3], e_d[3], e_s[3], e_r[3], e_lv[3], e_amt_lad, e_amt_svf, e_gate10, e_ppg[3];
@@ -82,7 +84,7 @@ static struct {
 /* ---------------------------------------------------------------- chrome */
 static void status(uint32_t now)
 {
-    static const char *const NAMES[SCR_FL_N] = { "", "", "", "VINYL", "WAVE", "ENV", "TIDES", "FILTER", "PLAY", "SHIFT", "MARBLES", "BEADS", "MATRIX", "SAMPLER" };
+    static const char *const NAMES[SCR_FL_N] = { "", "", "", "VINYL", "WAVE", "ENV", "TIDES", "FILTER", "SEQ", "SHIFT", "MARBLES", "BEADS", "MATRIX", "SAMPLER", "FX", "AMP" };
     char b[16];
     gfx_rect(0, 0, W, 7, T->bg);
     snprintf(b, sizeof b, "%02d", M.screen + 1); gfx_text(b, 2, 1, T->dim, 1);
@@ -398,7 +400,7 @@ static void scr_lfo(void)
 }
 
 /* ---------------------------------------------------------------- FILTER: the voice's two sst-filters models (osc440 filter 1 and 2): the routing as the title, each model's name
- * in its colour (filter 1 dim while fully open, when osc440 leaves it out), the combined response as on the
+ * in its colour (dim while fully open, when the track leaves it out), the combined response as on the
  * other filter graphs, each cutoff's column lit in its filter's colour and numbered at the top */
 static void mod_foot(void);
 static void scr_wflt(void)
@@ -407,11 +409,13 @@ static void scr_wflt(void)
     uint16_t col[2];
     distinct_colours(col, hue, 2);
     gfx_text(M.f_par ? "PARALLEL" : "SERIES", 4, 10, T->ink, 2);
-    const bool open1 = M.f_svf_hz <= 0;
+    const char *trk = M.sel ? "SAMPLER" : "OSC";        /* the track shown */
+    gfx_text(trk, XR + 1 - gfx_text_w(trk, 1), 13, T->dim, 1);
+    const bool open1 = M.f_svf_hz <= 0, open2 = M.f_lad_hz <= 0;   /* fully open: left out */
     char b[40];
     snprintf(b, sizeof b, "1 %s", M.fam); gfx_text(b, 4, 22, open1 ? T->dim : col[0], 1);
-    snprintf(b, sizeof b, "2 %s", M.var); gfx_text(b, 4, 29, col[1], 1);
-    int c2 = led_col(fx_of(M.f_lad_hz)), c1 = open1 ? -1 : led_col(fx_of(M.f_svf_hz));
+    snprintf(b, sizeof b, "2 %s", M.var); gfx_text(b, 4, 29, open2 ? T->dim : col[1], 1);
+    int c2 = open2 ? -1 : led_col(fx_of(M.f_lad_hz)), c1 = open1 ? -1 : led_col(fx_of(M.f_svf_hz));
     resp_graph(M.resp[1], c2, col[1], c1, col[0]);
     for (int f = 0; f < 2; f++) {
         int c = f ? c2 : c1;
@@ -419,6 +423,64 @@ static void scr_wflt(void)
         int x = 4 + c * 4;
         gfx_rect(x - 2, GT - 1, 5, 7, T->bg);
         gfx_text(f ? "2" : "1", x - 1, GT, col[f], 1);
+    }
+    mod_foot();
+}
+
+/* ---------------------------------------------------------------- FX: the effects chain on the mix of both tracks:
+ * Beads, then the Vinyl Sim, each a block lit while on (dim and OFF when bypassed) with three of its values */
+static void fx_block(int x, int y, int w, int h, int n, const char *name, bool on, const char *const lab[3], const int val[3])
+{
+    if (on) { gfx_rect(x, y, w, h, T->surf); gfx_frame(x, y, w, h, T->accent); } else gfx_frame(x, y, w, h, T->line);
+    char b[16];
+    snprintf(b, sizeof b, "%d %s", n, name);
+    gfx_text(b, x + 3, y + 3, on ? T->ink : T->dim, 1);
+    const char *st = on ? "ON" : "OFF";
+    gfx_text(st, x + w - 2 - gfx_text_w(st, 1), y + 3, on ? T->accent : T->dim, 1);
+    for (int i = 0; i < 3; i++) {
+        snprintf(b, sizeof b, "%d", val[i]);
+        gfx_text(lab[i], x + 3, y + 13 + i * 8, T->dim, 1);
+        gfx_text(b, x + w - 3 - gfx_text_w(b, 1), y + 13 + i * 8, on ? tk(i) : T->line, 1);
+    }
+}
+static void scr_fx(void)
+{
+    mod_head_text("FX", "BEADS > VINYL SIM");
+    static const char *const BL[3] = { "TIME", "SIZE", "DENS" }, *const VL[3] = { "COMP", "NOISE", "WOW" };
+    const int bv[3] = { M.b_time, M.b_size, M.b_dens }, vv[3] = { M.v_comp, M.v_noise, M.v_wow };
+    const int y = 40, w = 66, h = 40;
+    fx_block(3, y, w, h, 1, "BEADS", M.fx_bon, BL, bv);
+    gfx_text(">", W / 2 - 1, y + h / 2 - 2, T->dim, 1);
+    fx_block(W - 3 - w, y, w, h, 2, "VINYL", M.v_on, VL, vv);
+    mod_foot();
+}
+
+/* ---------------------------------------------------------------- AMP (sampler track): its attack / decay on the
+ * FILTER screen's LED matrix (the infill dim, the curve round LEDs in the ink), the filter envelope over it in the
+ * second colour when it has an amount; one linear time axis for both */
+static void scr_samp_amp(void)
+{
+    char b[48];
+    snprintf(b, sizeof b, "SAMPLER  LVL %d%%  FENV %+d", M.sa_lvl, M.sa_fenv);
+    mod_head_text("AMP", b);
+    float atk = M.sa_atk < 1 ? 1.f : (float)M.sa_atk, dec = (float)M.sa_dec, fdec = M.sa_fdec < 1 ? 1.f : (float)M.sa_fdec;
+    float T_ = atk + (dec > 0.f ? dec : 400.f);
+    if (M.sa_fenv && 3.f * fdec > T_) T_ = 3.f * fdec;
+    if (T_ > 10000.f) T_ = 10000.f;
+    uint8_t amp[NCOL];
+    int fy[NCOL];
+    for (int c = 0; c < NCOL; c++) {
+        float t = (float)c / (float)(NCOL - 1) * T_;
+        float a = t < atk ? t / atk : (dec > 0.f ? __builtin_expf(-6.9f * (t - atk) / dec) : 1.f);
+        amp[c] = (uint8_t)(a * (float)GH + 0.5f);
+        fy[c] = GB - (int)(__builtin_expf(-t / fdec) * (float)GH + 0.5f);
+    }
+    resp_graph(amp, -1, 0, -1, 0);
+    if (M.sa_fenv) {
+        const int hue[2] = { 1, 2 };
+        uint16_t col[2];
+        distinct_colours(col, hue, 2);
+        for (int c = 0; c < NCOL; c++) led_round(4 + c * 4, fy[c], col[0]);
     }
     mod_foot();
 }
@@ -882,7 +944,8 @@ enum { S_SCREEN, S_THEME, S_PLAYING, S_BPM, S_FILTER, S_NFILT, S_STEP, S_BAR, S_
        S_V_ON, S_V_MODE, S_V_COMP, S_V_NOISE, S_V_WOW, S_V_IN, S_V_GR,
        S_W_OSC, S_W_POS, S_W_LVL, S_W_CUT, S_W_RES, S_W_HELD, S_W_WT,
        S_E_AMT_LAD, S_E_AMT_SVF, S_E_GATE, S_L_PH, S_L_RATE, S_L_DLY, S_F_SVF, S_F_LAD, S_F_RES, S_F_DRV, S_F_PAR,
-       S_F_SVFN, S_F_LADN, S_E_LV0, S_E_LV1, S_P_MODE, S_P_OCT, S_P_VOL, S_P_ON };
+       S_F_SVFN, S_F_LADN, S_E_LV0, S_E_LV1, S_P_MODE, S_P_OCT, S_P_VOL, S_P_ON,
+       S_SA_ATK, S_SA_DEC, S_SA_LVL, S_SA_FENV, S_SA_FDEC, S_FX_BON };
 
 API void scr_set(int k, int v, uint32_t now)
 {
@@ -945,6 +1008,12 @@ API void scr_set(int k, int v, uint32_t now)
     case S_P_OCT: M.p_oct = v; break;
     case S_P_VOL: M.p_vol = v; break;
     case S_P_ON: M.p_on = v; break;
+    case S_SA_ATK: M.sa_atk = v; break;
+    case S_SA_DEC: M.sa_dec = v; break;
+    case S_SA_LVL: M.sa_lvl = v; break;
+    case S_SA_FENV: M.sa_fenv = v; break;
+    case S_SA_FDEC: M.sa_fdec = v; break;
+    case S_FX_BON: M.fx_bon = v; break;
     }
 }
 
@@ -979,6 +1048,8 @@ API int scr_frame(uint32_t now)
         case SCR_FL_BEADS: scr_beads(now); break;
         case SCR_FL_MATRIX: scr_matrix(); break;
         case SCR_FL_SAMPLER: scr_sampler(now); break;
+        case SCR_FL_FX: scr_fx(); break;
+        case SCR_FL_SAMP_AMP: scr_samp_amp(); break;
         default: scr_wave(now); break;
         }
         status(now);

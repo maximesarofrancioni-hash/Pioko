@@ -12,6 +12,7 @@
    PICTURE: dark screen window with concentric Euclidean step rings + live spectrum
    COLOUR and TYPE: brushed aluminium plate, graphite screen, one red LED accent; Barlow Condensed legends
    LAYOUT: plate header with play + filter name, screen window, filter browser, knob row, lane strips */
+[hidden]{display:none!important}
 :root{color-scheme:light dark;
 --bg:light-dark(#d6d9dc,#1b1d20);--plate:light-dark(#e4e6e8,#25282c);--ink:light-dark(#15171a,#e7e9eb);
 --mute:light-dark(#5b6168,#9aa1a8);--screen:#0f1113;--scr-ink:#d9dde1;--scr-dim:#3a4047;
@@ -119,7 +120,6 @@ canvas#scr{display:block;margin:0 auto;width:100%;aspect-ratio:150/112;image-ren
 .slot select{min-height:40px;font-size:15px;width:100%}
 .slot .enc{flex-direction:row;gap:8px;padding:0;justify-content:flex-start}.slot .enc svg{width:48px;max-width:48px}
 .slot .enc .legend{display:none}.slot .enc output{min-width:80px;text-align:left}
-.usewave.on{background:var(--ink);color:var(--plate)}
 .wpat{display:flex;gap:3px;flex:1 1 200px}.wpat i{flex:1;height:18px;border-radius:3px;background:var(--line)}
 .wpat i.h{background:#c48bff}.spat i.h{background:#3fa9f5}
 .spads{display:grid;grid-template-columns:repeat(16,minmax(0,1fr));gap:4px;margin-top:10px}.spads button{min-height:40px;padding:0;font-size:13px}.spads button.hot{background:var(--led);color:#000}
@@ -158,6 +158,7 @@ dialog#settings h3{margin:14px 0 4px;font:700 15px/1 "Barlow Condensed",sans-ser
   <button id="play" aria-pressed="false"><i></i><span>Play</span></button>
   <div class="stepw"><span class="legend">Tempo</span><div class="step"><button data-tempo="-1" aria-label="Tempo down">−</button><span id="tempo">120 BPM</span><button data-tempo="1" aria-label="Tempo up">+</button></div></div>
   <div class="stepw"><span class="legend">Swing</span><div class="step"><button data-swing="-2" aria-label="Swing down">−</button><span id="swing">50%</span><button data-swing="2" aria-label="Swing up">+</button></div></div>
+  <div class="stepw"><span class="legend">Track</span><span class="seg" id="track"><button data-v="1" class="on">1 Osc</button><button data-v="2">2 Sampler</button></span></div>
   <span class="sp"></span><button id="setb" aria-haspopup="dialog">Settings</button>
  </header>
  <dialog id="settings" aria-labelledby="set-h">
@@ -182,38 +183,73 @@ dialog#settings h3{margin:14px 0 4px;font:700 15px/1 "Barlow Condensed",sans-ser
  </div>
 
  <nav class="keys" id="keys" aria-label="Pages">
-  <div class="kg"><span class="kgl"><span class="lf">VOICE</span><span class="ls">VCE</span></span><div class="kgk"><button class="key on" data-k="model" aria-pressed="true"><b><i></i></b><span class="lf">FILTER</span><span class="ls">FLT</span></button></div></div>
-  <div class="kg"><span class="kgl"><span class="lf">SEQUENCE</span><span class="ls">SEQ</span></span><div class="kgk"><button class="key" data-k="shift" aria-pressed="false"><b><i></i></b><span class="lf">SHIFT</span><span class="ls">SHF</span></button><button class="key" data-k="marbles" aria-pressed="false"><b><i></i></b><span class="lf">MARBLES</span><span class="ls">MRB</span></button></div></div>
-  <div class="kg"><span class="kgl"><span class="lf">WAVETABLE</span><span class="ls">WAVE</span></span><div class="kgk"><button class="key" data-k="play" aria-pressed="false"><b><i></i></b><span class="lf">PLAY</span><span class="ls">PLY</span></button><button class="key" data-k="osc" aria-pressed="false"><b><i></i></b><span class="lf">OSC</span><span class="ls">OSC</span></button><button class="key" data-k="env" aria-pressed="false"><b><i></i></b><span class="lf">ENV</span><span class="ls">ENV</span></button></div></div>
-  <div class="kg"><span class="kgl"><span class="lf">SAMPLER</span><span class="ls">SMP</span></span><div class="kgk"><button class="key" data-k="sampler" aria-pressed="false"><b><i></i></b><span class="lf">SAMPLER</span><span class="ls">SMP</span></button></div></div>
+  <div class="kg"><span class="kgl"><span class="lf">SEQ</span><span class="ls">SEQ</span></span><div class="kgk"><button class="key" data-k="seq" aria-pressed="false"><b><i></i></b><span class="lf">SEQ</span><span class="ls">SEQ</span></button><button class="key" data-k="marbles" aria-pressed="false"><b><i></i></b><span class="lf">MARBLES</span><span class="ls">MRB</span></button><button class="key" data-k="shift" aria-pressed="false"><b><i></i></b><span class="lf">SHIFT</span><span class="ls">SHF</span></button></div></div>
+  <div class="kg"><span class="kgl"><span class="lf">GEN</span><span class="ls">GEN</span></span><div class="kgk"><button class="key" data-k="osc" aria-pressed="false"><b><i></i></b><span class="lf">OSC</span><span class="ls">OSC</span></button><button class="key" data-k="sampler" aria-pressed="false"><b><i></i></b><span class="lf">SAMPLER</span><span class="ls">SMP</span></button></div></div>
+  <div class="kg"><span class="kgl"><span class="lf">VCF</span><span class="ls">VCF</span></span><div class="kgk"><button class="key on" data-k="model" aria-pressed="true"><b><i></i></b><span class="lf">FILTER</span><span class="ls">FLT</span></button></div></div>
+  <div class="kg"><span class="kgl"><span class="lf">AMP</span><span class="ls">AMP</span></span><div class="kgk"><button class="key" data-k="env" aria-pressed="false"><b><i></i></b><span class="lf">ENV</span><span class="ls">ENV</span></button></div></div>
   <div class="kg"><span class="kgl"><span class="lf">MOD</span><span class="ls">MOD</span></span><div class="kgk"><button class="key" data-k="tides" aria-pressed="false"><b><i></i></b><span class="lf">TIDES</span><span class="ls">TDS</span></button><button class="key" data-k="matrix" aria-pressed="false"><b><i></i></b><span class="lf">MATRIX</span><span class="ls">MTX</span></button></div></div>
-  <div class="kg"><span class="kgl"><span class="lf">FX</span><span class="ls">FX</span></span><div class="kgk"><button class="key" data-k="beads" aria-pressed="false"><b><i></i></b><span class="lf">BEADS</span><span class="ls">BDS</span></button><button class="key" data-k="vinyl" aria-pressed="false"><b><i></i></b><span class="lf">VINYL</span><span class="ls">VNL</span></button></div></div>
+  <div class="kg"><span class="kgl"><span class="lf">FX</span><span class="ls">FX</span></span><div class="kgk"><button class="key" data-k="fx" aria-pressed="false"><b><i></i></b><span class="lf">FX</span><span class="ls">FX</span></button></div></div>
  </nav>
 
  <section class="sec" id="s-model">
+  <div class="t1">
   <div class="vrow"><span class="legend">Routing</span><span class="seg" id="froute"><button data-r="0" class="on">Series</button><button data-r="1">Parallel</button></span></div>
   <div class="wgrid">
    <div class="wsec"><h3>Filter 1<span class="sp"></span><select id="f1m" aria-label="Filter 1 model"></select></h3><div class="knobs" id="wk-f1"></div></div>
    <div class="wsec"><h3>Filter 2<span class="sp"></span><select id="f2m" aria-label="Filter 2 model"></select></h3><div class="knobs" id="wk-f2"></div></div>
   </div>
+  </div>
+  <div class="t2" hidden>
+  <div class="vrow"><span class="legend">Routing</span><span class="seg" id="sroute"><button data-v="0" class="on">Series</button><button data-v="1">Parallel</button></span></div>
+  <div class="wgrid">
+   <div class="wsec"><h3>Filter 1<span class="sp"></span><select id="sf1m" aria-label="Sampler filter 1 model"></select></h3><div class="knobs" id="sv-f1"></div></div>
+   <div class="wsec"><h3>Filter 2<span class="sp"></span><select id="sf2m" aria-label="Sampler filter 2 model"></select></h3><div class="knobs" id="sv-f2"></div></div>
+  </div>
+  <div class="wgrid one"><div class="wsec"><h3>Filter envelope</h3><div class="knobs" id="sv-env"></div></div></div>
+  </div>
  </section>
 
- <section class="sec" id="s-play" hidden>
-  <div class="browser">
-   <button id="wprev" aria-label="Previous preset">◀</button>
-   <select id="wpre" aria-label="osc440 preset"></select>
-   <button id="wnext" aria-label="Next preset">▶</button>
-   <button id="lofi">Lofi hip hop</button>
-  </div>
+ <section class="sec" id="s-seq" hidden>
+  <div class="vrow"><button id="lofi">Lofi hip hop</button></div>
+  <div class="t1">
   <div class="vrow">
    <button id="wmute" aria-pressed="true">Wave lane on</button>
    <span class="legend">Chords</span><span class="seg" id="wprog"><button data-v="0" class="on">Am F C G</button><button data-v="1">Fmaj9 Em9 Dm9 Cmaj9</button></span>
-   <span class="seg" id="wmode"><button data-m="0" class="on">Chord</button><button data-m="1">Arp</button><button data-m="2">Bass</button><button data-m="3">Shift</button><button data-m="4">Marbles</button></span>
+   <span class="legend">Sequencer</span><span class="seg" id="seq1"><button data-v="0" class="on">Euclid</button><button data-v="1">Marbles</button><button data-v="2">Shift</button></span>
+   <span class="legend">Style</span><span class="seg" id="wmode"><button data-m="0" class="on">Chord</button><button data-m="1">Arp</button><button data-m="2">Bass</button></span>
    <div class="stepw"><span class="legend">Octave</span><div class="step"><button data-w="oct" data-d="-1" aria-label="Octave down">−</button><span id="woct">0</span><button data-w="oct" data-d="1" aria-label="Octave up">+</button></div></div>
    <div class="stepw"><span class="legend">Hits</span><div class="step"><button data-w="hits" data-d="-1" aria-label="Hits down">−</button><span id="whits">5</span><button data-w="hits" data-d="1" aria-label="Hits up">+</button></div></div>
    <div class="stepw"><span class="legend">Steps</span><div class="step"><button data-w="steps" data-d="-1" aria-label="Steps down">−</button><span id="wsteps">16</span><button data-w="steps" data-d="1" aria-label="Steps up">+</button></div></div>
    <div class="stepw"><span class="legend">Rotate</span><div class="step"><button data-w="rot" data-d="-1" aria-label="Rotate down">−</button><span id="wrot">2</span><button data-w="rot" data-d="1" aria-label="Rotate up">+</button></div></div>
    <div class="wpat" id="wpat"></div>
+  </div>
+  </div>
+  <div class="t2" hidden>
+   <div class="vrow">
+    <button id="son" aria-pressed="true">Sampler on</button>
+    <span class="legend">Sequencer</span><span class="seg" id="seq2"><button data-v="0" class="on">Euclid</button><button data-v="1">Marbles</button><button data-v="2">Shift</button></span>
+    <span class="legend">Order</span><span class="seg" id="sorder"><button data-v="0" class="on">Step</button><button data-v="1">Random</button></span>
+   </div>
+   <div class="vrow">
+    <div class="stepw"><span class="legend">Hits</span><div class="step"><button data-s="hits" data-d="-1" aria-label="Hits down">−</button><span id="shits">12</span><button data-s="hits" data-d="1" aria-label="Hits up">+</button></div></div>
+    <div class="stepw"><span class="legend">Steps</span><div class="step"><button data-s="steps" data-d="-1" aria-label="Steps down">−</button><span id="ssteps">16</span><button data-s="steps" data-d="1" aria-label="Steps up">+</button></div></div>
+    <div class="stepw"><span class="legend">Rotate</span><div class="step"><button data-s="rot" data-d="-1" aria-label="Rotate down">−</button><span id="srot">0</span><button data-s="rot" data-d="1" aria-label="Rotate up">+</button></div></div>
+    <div class="wpat spat" id="spat"></div>
+   </div>
+  </div>
+  <p class="note">Each track's sequencer. Euclid plays the track's own pattern; Marbles plays the osc track from T1 / X1 and T3 / X3 and the sampler from T2, X2 choosing the slice; the shift register plays its notes (osc) or picks the slice from its low byte (sampler), on the gate its page sets.</p>
+ </section>
+
+ <section class="sec" id="s-osc" hidden>
+  <div class="browser">
+   <button id="wprev" aria-label="Previous preset">◀</button>
+   <select id="wpre" aria-label="osc440 preset"></select>
+   <button id="wnext" aria-label="Next preset">▶</button>
+  </div>
+  <div class="wgrid one">
+   <div class="wsec"><h3>Oscillator <span class="seg oscsel" id="oscsel"><button data-o="0" class="on">1</button><button data-o="1">2</button><button data-o="2">3</button></span><span class="sp"></span>
+     <select id="omode" aria-label="Oscillator mode"></select><span class="seg" id="otable"><button data-t="0" class="on">Basic</button><button data-t="1">Plaits A</button></span><button id="osync" aria-pressed="false">Sync</button></h3>
+    <div class="knobs" id="wk-osc"></div></div>
   </div>
   <div class="wgrid one">
    <div class="wsec"><h3>Voice</h3><div class="knobs" id="wk-voc"></div></div>
@@ -221,16 +257,10 @@ dialog#settings h3{margin:14px 0 4px;font:700 15px/1 "Barlow Condensed",sans-ser
   <p class="note">osc440, the 3rd Wave-style voice from your RP2350 module, unmodified and compiled to WebAssembly: 16 voices, 3 oscillators (wavetable or VA, FM, sync, wave envelopes), two sst-filters models per voice, in series or parallel, 4 envelopes, 4 LFOs, 16-slot matrix. Presets carry the wave envelopes and matrix; the knobs here edit the main parameters. It runs on a sixth Euclidean lane, Am–F–C–G one chord per bar, mixed before Beads and the Vinyl Sim.</p>
  </section>
 
- <section class="sec" id="s-osc" hidden>
-  <div class="wgrid one">
-   <div class="wsec"><h3>Oscillator <span class="seg oscsel" id="oscsel"><button data-o="0" class="on">1</button><button data-o="1">2</button><button data-o="2">3</button></span><span class="sp"></span>
-     <select id="omode" aria-label="Oscillator mode"></select><span class="seg" id="otable"><button data-t="0" class="on">Basic</button><button data-t="1">Plaits A</button></span><button id="osync" aria-pressed="false">Sync</button></h3>
-    <div class="knobs" id="wk-osc"></div></div>
-  </div>
- </section>
-
 
  <section class="sec" id="s-env" hidden>
+  <div class="t2" hidden><div class="wgrid one"><div class="wsec"><h3>Sampler amp</h3><div class="knobs" id="sk-amp"></div></div></div></div>
+  <div class="t1">
   <div class="vrow"><span class="seg" id="esel"><button data-v="0">Env 1 · filters</button><button data-v="1" class="on">Env 2 · amp</button><button data-v="2">Env 3 · mod</button></span></div>
   <div class="wgrid one">
    <div class="wsec"><h3>Env 1 · filters<span class="sp"></span><span class="seg emode" data-id="50"><button data-v="0" class="on">Exp</button><button data-v="1">Lin</button></span></h3><div class="knobs" id="wk-e1"></div></div>
@@ -238,10 +268,11 @@ dialog#settings h3{margin:14px 0 4px;font:700 15px/1 "Barlow Condensed",sans-ser
    <div class="wsec"><h3>Env 3 · mod<span class="sp"></span><span class="seg emode" data-id="66"><button data-v="0" class="on">Exp</button><button data-v="1">Lin</button></span></h3><div class="knobs" id="wk-e3"></div>
     <div class="vrow"><span class="legend">To</span><select id="e3dest" aria-label="Env 3 destination"></select><div class="rk" id="e3amt"></div></div></div>
   </div>
+  </div>
  </section>
 
  <section class="sec" id="s-shift" hidden>
-  <div class="wgrid one"><div class="wsec"><h3>Shift register<span class="sp"></span><button class="usewave" data-m="3" aria-pressed="false">Plays the wave lane</button></h3>
+  <div class="wgrid one"><div class="wsec"><h3>Shift register</h3>
    <div class="vrow"><span class="legend">Scale</span><span class="seg" id="shscale"><button data-v="0" class="on">Min pent</button><button data-v="1">Minor</button><button data-v="2">Dorian</button><button data-v="3">Major</button><button data-v="4">Chrom</button></span>
     <span class="legend">Gate</span><span class="seg" id="shgate"><button data-v="0" class="on">Euclid</button><button data-v="1">Bit 1</button><button data-v="2">All 16ths</button></span></div>
    <div class="knobs" id="mk-shift"></div></div></div>
@@ -249,19 +280,18 @@ dialog#settings h3{margin:14px 0 4px;font:700 15px/1 "Barlow Condensed",sans-ser
  </section>
 
  <section class="sec" id="s-marbles" hidden>
-  <div class="wgrid one"><div class="wsec"><h3>Marbles<span class="sp"></span><button class="usewave" data-m="4" aria-pressed="false">Plays the wave lane</button></h3>
+  <div class="wgrid one"><div class="wsec"><h3>Marbles</h3>
    <div class="vrow"><span class="legend">T model</span><span class="seg" id="mbmodel"><button data-v="0" class="on">Coin</button><button data-v="1">Clusters</button><button data-v="2">Drums</button><button data-v="3">Indep</button><button data-v="4">Divider</button><button data-v="5">3 states</button><button data-v="6">Markov</button></span></div>
    <div class="vrow"><span class="legend">T rate</span><span class="seg" id="mbrate"><button data-v="0">÷4</button><button data-v="1">÷2</button><button data-v="2" class="on">×1</button><button data-v="3">×2</button><button data-v="4">×4</button></span>
     <span class="legend">X scale</span><span class="seg" id="mbscale"><button data-v="0" class="on">Major</button><button data-v="1">Minor</button><button data-v="2">Pent</button><button data-v="3">Pelog</button><button data-v="4">Bhairav</button><button data-v="5">Shri</button></span>
     <span class="legend">X range</span><span class="seg" id="mbrange"><button data-v="0" class="on">2 oct</button><button data-v="1">5 oct</button><button data-v="2">±5</button></span></div>
    <div class="knobs" id="mk-marbles"></div></div></div>
-  <p class="note">Mutable Instruments Marbles (T and X sections), clocked by the 16ths. T1 plays X1 and T3 plays X3 on the wave lane; Déjà vu loops both.</p>
+  <p class="note">Mutable Instruments Marbles (T and X sections), clocked by the 16ths. T1 / X1 and T3 / X3 play the osc track, T2 / X2 the sampler, on the tracks that choose Marbles on SEQ; Déjà vu loops both.</p>
  </section>
 
  <section class="sec" id="s-sampler" hidden>
   <div class="wgrid one"><div class="wsec"><h3>Sampler<span class="sp"></span><span class="legend" id="sinfo"></span></h3>
    <div class="vrow">
-    <button id="son" aria-pressed="true">Sampler on</button>
     <button id="sload">Load sample…</button><input type="file" id="sfile" accept="audio/*" hidden>
     <button id="sdemo">Demo break</button>
     <span class="legend">Resample</span><span class="seg" id="sarm"><button data-v="1">1 bar</button><button data-v="2">2 bars</button><button data-v="4">4 bars</button></span>
@@ -269,15 +299,8 @@ dialog#settings h3{margin:14px 0 4px;font:700 15px/1 "Barlow Condensed",sans-ser
    <div class="vrow">
     <span class="legend">Mode</span><span class="seg" id="smode"><button data-v="0">One shot</button><button data-v="1" class="on">Slice</button></span>
     <span class="legend">Slices</span><span class="seg" id="sslices"><button data-v="4">4</button><button data-v="8">8</button><button data-v="16">16</button><button data-v="0" class="on">Auto</button></span>
-    <span class="legend">Order</span><span class="seg" id="sorder"><button data-v="0" class="on">Step</button><button data-v="1">Random</button></span>
     <button id="srev" aria-pressed="false">Reverse</button>
     <span class="legend">Pitch</span><span class="seg" id="spmode"><button data-v="0">Varispeed</button><button data-v="1" class="on">Keep time</button></span>
-   </div>
-   <div class="vrow">
-    <div class="stepw"><span class="legend">Hits</span><div class="step"><button data-s="hits" data-d="-1" aria-label="Hits down">−</button><span id="shits">12</span><button data-s="hits" data-d="1" aria-label="Hits up">+</button></div></div>
-    <div class="stepw"><span class="legend">Steps</span><div class="step"><button data-s="steps" data-d="-1" aria-label="Steps down">−</button><span id="ssteps">16</span><button data-s="steps" data-d="1" aria-label="Steps up">+</button></div></div>
-    <div class="stepw"><span class="legend">Rotate</span><div class="step"><button data-s="rot" data-d="-1" aria-label="Rotate down">−</button><span id="srot">0</span><button data-s="rot" data-d="1" aria-label="Rotate up">+</button></div></div>
-    <div class="wpat spat" id="spat"></div>
    </div>
    <div class="knobs" id="sk"></div>
    <div class="spads" id="spads" aria-label="Audition slices"></div></div></div>
@@ -300,23 +323,22 @@ dialog#settings h3{margin:14px 0 4px;font:700 15px/1 "Barlow Condensed",sans-ser
   <p class="note">osc440's 16-slot modulation matrix, per voice. Presets fill it; edit any slot here. Slot 16 is Env 3's route, set on the ENV page. Amounts are a share of each destination's range (shown in its own units).</p>
  </section>
 
- <section class="sec" id="s-beads" hidden>
-  <div class="wgrid one"><div class="wsec"><h3>Beads<span class="sp"></span><button id="bon" aria-pressed="true">Beads on</button><button id="bfreeze" aria-pressed="false">Freeze</button></h3>
+ <section class="sec" id="s-fx" hidden>
+  <div class="wgrid one">
+   <div class="wsec"><h3>1 · Beads<span class="sp"></span><button id="bon" aria-pressed="true">Beads on</button><button id="bfreeze" aria-pressed="false">Freeze</button></h3>
    <div class="vrow"><span class="legend">Quality</span><span class="seg" id="bqual"><button data-v="0">Dirty tape</button><button data-v="1">Clean tape</button><button data-v="2">Vintage</button><button data-v="3" class="on">Digital</button></span>
     <span class="legend">Seed</span><span class="seg" id="bseed"><button data-v="0" class="on">Density</button><button data-v="1">Wave notes</button><button data-v="2">16ths</button></span></div>
-   <div class="knobs" id="mk-beads"></div></div></div>
-  <p class="note">Mutable Instruments Beads on the master bus, before the Vinyl Sim. Density at noon makes no grains: turn right for random grains, left for regular ones, or let a seed trigger them.</p>
- </section>
-
- <section class="sec" id="s-vinyl" hidden>
+   <div class="knobs" id="mk-beads"></div></div>
+   <div class="wsec"><h3>2 · Vinyl Sim<span class="sp"></span><button id="von" aria-pressed="true">Vinyl Sim on</button></h3>
   <div class="vrow">
-   <button id="von" aria-pressed="true">Vinyl Sim on</button>
    <span class="legend">Compressor</span>
    <span class="seg" id="vmode"><button data-m="firmware" class="on">Firmware</button><button data-m="recon">Reconstructed</button></span>
    <div class="grm"><span class="legend">GR</span><div class="bar"><i id="grbar"></i></div><output id="grval">0.0 dB</output></div>
   </div>
   <div class="knobs" id="vknobs"></div>
-  <p class="note">The SP-303's Vinyl Sim program, decoded from its firmware and run in an emulation of its effects DSP, on the master bus after the filters. Bit-exact with the reference simulator; the Reconstructed compressor is a fitted model, not a confirmed decode. Not yet checked against your SP-505. The SP runs at 44.1 kHz, so the page asks the browser for 44.1 kHz too.</p>
+   </div>
+  </div>
+  <p class="note">The effects, in order on the mix of both tracks: Mutable Instruments Beads, then the SP-303's Vinyl Sim (decoded from its firmware, run in an emulation of its effects DSP at 44.1 kHz; the Reconstructed compressor is a fitted model). Each one can be switched off.</p>
  </section>
  <div class="bottom">
   <p class="foot"><span id="msg"></span> The page keys pick the screen.
@@ -449,7 +471,7 @@ document.body.insertAdjacentHTML('beforeend',`<svg width="0" height="0" style="p
  <radialGradient id="kg" cx=".4" cy=".3" r=".85"><stop offset="0" stop-color="#55514c"/><stop offset=".7" stop-color="#232120"/><stop offset="1" stop-color="#121110"/></radialGradient>
  <radialGradient id="kt" cx=".45" cy=".35" r=".7"><stop offset="0" stop-color="#3b3834"/><stop offset="1" stop-color="#211f1d"/></radialGradient></defs></svg>`);
 // open-mpk4 display
-const SS={p_mode:48,p_oct:49,p_vol:50,p_on:51,e_amt_lad:33,e_amt_svf:34,e_gate:35,l_ph:36,l_rate:37,l_dly:38,f_svf:39,f_lad:40,f_res:41,f_drv:42,f_par:43,f_svfn:44,f_ladn:45,e_lv0:46,e_lv1:47,w_osc:26,w_pos:27,w_lvl:28,w_cut:29,w_res:30,w_held:31,w_wt:32,v_on:19,v_mode:20,v_comp:21,v_noise:22,v_wow:23,v_in:24,v_gr:25,screen:0,theme:1,playing:2,bpm:3,filter:4,nfilt:5,step:6,bar:7,barsper:8,sweep:9,res:10,cut:11,env:12,drv:13,fc:14,sel:15,popk:16,popm:17,boot:18};
+const SS={p_mode:48,p_oct:49,p_vol:50,p_on:51,e_amt_lad:33,e_amt_svf:34,e_gate:35,l_ph:36,l_rate:37,l_dly:38,f_svf:39,f_lad:40,f_res:41,f_drv:42,f_par:43,f_svfn:44,f_ladn:45,e_lv0:46,e_lv1:47,w_osc:26,w_pos:27,w_lvl:28,w_cut:29,w_res:30,w_held:31,w_wt:32,v_on:19,v_mode:20,v_comp:21,v_noise:22,v_wow:23,v_in:24,v_gr:25,screen:0,theme:1,playing:2,bpm:3,filter:4,nfilt:5,step:6,bar:7,barsper:8,sweep:9,res:10,cut:11,env:12,drv:13,fc:14,sel:15,popk:16,popm:17,boot:18,sa_atk:52,sa_dec:53,sa_lvl:54,sa_fenv:55,sa_fdec:56,fx_bon:57};
 const now=()=>Math.floor(performance.now())+1000;
 // settings, remembered in this browser
 const SDEF={vol:0,lat:'interactive',dth:0,pth:'auto',pal:'alu',tdc:2};
@@ -493,7 +515,7 @@ let sc=null,scrN=7,themeN=0,spec=null;
 const gunzip=async b64=>{const bin=atob(b64),gz=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)gz[i]=bin.charCodeAt(i);
  return new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer()};
 function splitName(n){const m=n.match(/^(.*?)\s+(?:-\s+|\()(.*?)\)?$/);return (m?[m[1],m[2]]:[n,'']).map(x=>x.toUpperCase())}
-function setScreen(i){scrN=i;sc&&sc.set(SS.screen,i);scrMods();if(i===13&&typeof scrSampler==='function')scrSampler();if(i===12&&typeof scrMatrix==='function')scrMatrix();if(i===7)scrWave()}
+function setScreen(i){scrN=i;sc&&sc.set(SS.screen,i);scrMods();if(i===15)scrSAmp();if(i===7)scrFilter();if(i===13&&typeof scrSampler==='function')scrSampler();if(i===12&&typeof scrMatrix==='function')scrMatrix();if(i===7)scrWave()}
 
 $('setb').addEventListener('click',()=>{syncSettings();$('settings').showModal()});
 $('s-done').addEventListener('click',()=>$('settings').close());
@@ -524,7 +546,7 @@ $('s-reset').addEventListener('click',()=>{Object.assign(cfg,SDEF);saveCfg();set
   $('s-dth').innerHTML=Array.from({length:e.scr_n_themes()},(_,i)=>`<option value="${i}">${sc.cstr(e.scr_theme_name(i))}</option>`).join('')
    +(thOrig?SCR_PALS.map((P,i)=>`<option value="${e.scr_n_themes()+i}">${P.n}</option>`).join(''):'');
   setDispTheme(cfg.dth|0);tdvDraw();   // MODEL is lit at load: its FILTER screen
-  sc.set(SS.bpm,bpm);scrVinyl();scrWave();envFocus(eFocus);
+  sc.set(SS.bpm,bpm);scrVinyl();scrWave();envFocus(eFocus);scrSAmp();scrFx();
   const g=$('scr').getContext('2d'),img=g.createImageData(W,H),d=img.data;
   (function loop(){
    requestAnimationFrame(loop);
@@ -554,6 +576,7 @@ Object.assign(knobDef,{vcomp:64,vnoise:0,vwow:0,vin:0,vout:0});
 const VK=Object.fromEntries(vknobs.map(k=>[k.k,k]));
 const VPOP={vcomp:['VINYL COMP',''],vnoise:['VINYL NOISE',''],vwow:['VINYL WOW',''],vin:['VINYL INPUT','DB'],vout:['VINYL OUTPUT','DB']};
 function sendVinyl(){send({t:'vin',c:{on:vst.on?1:0,mode:vst.mode,comp:VK.vcomp.v,noise:VK.vnoise.v,wow:VK.vwow.v,gin:10**(VK.vin.v/20),gout:10**(VK.vout.v/20)}})}
+function scrFx(){if(!sc)return;sc.set(SS.fx_bon,bst.on?1:0);sc.set(SS.v_on,vst.on?1:0)}
 function scrVinyl(k){
  if(!sc)return;sc.set(SS.v_on,vst.on?1:0);sc.set(SS.v_mode,vst.mode==='recon'?1:0);
  sc.set(SS.v_comp,VK.vcomp.v);sc.set(SS.v_noise,VK.vnoise.v);sc.set(SS.v_wow,VK.vwow.v);sc.set(SS.v_in,Math.round(VK.vin.v*10));
@@ -561,17 +584,24 @@ function scrVinyl(k){
 }
 function showGR(g){const db=g>0?Math.max(-24,20*Math.log10(Math.min(1,g))):-24;
  $('grbar').style.width=(-db/24*100).toFixed(1)+'%';$('grval').textContent=(db>-0.05?'0.0':db.toFixed(1))+' dB';sc&&sc.set(SS.v_gr,Math.round(db*10))}
-vknobs.forEach(k=>encoder($('vknobs'),k,k=>{sendVinyl();scrVinyl(k);if(scrN!==3)setScreen(3)}));
-$('von').addEventListener('click',()=>{vst.on=!vst.on;$('von').textContent='Vinyl Sim '+(vst.on?'on':'bypassed');$('von').setAttribute('aria-pressed',vst.on);sendVinyl();scrVinyl();if(!vst.on)showGR(1)});
+vknobs.forEach(k=>encoder($('vknobs'),k,k=>{sendVinyl();scrVinyl(k);scrFx()}));
+$('von').addEventListener('click',()=>{vst.on=!vst.on;$('von').textContent='Vinyl Sim '+(vst.on?'on':'bypassed');$('von').setAttribute('aria-pressed',vst.on);sendVinyl();scrVinyl();scrFx();if(!vst.on)showGR(1)});
 $('vmode').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;vst.mode=b.dataset.m;
  $('vmode').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));sendVinyl();scrVinyl()});
 // page keys: one section shown at a time; the display follows
-const SECSCR={sampler:13,matrix:12,model:7,shift:9,marbles:10,play:8,osc:4,env:5,tides:6,beads:11,vinyl:3};
+// the screen of each page; SEQ and ENV show the shown track's (FILTER feeds its one screen per track)
+const SECSCR={sampler:13,matrix:12,model:7,shift:9,marbles:10,osc:4,tides:6,fx:14};
+const scrFor=k=>k==='seq'?(track===1?8:13):k==='env'?(track===1?5:15):SECSCR[k];
+// the track the SEQ, FILTER and ENV pages show: 1 osc440, 2 the sampler
+let track=1;
+function setTrack(t){track=t;segOn('track',t);document.querySelectorAll('.t1').forEach(e=>e.hidden=t!==1);document.querySelectorAll('.t2').forEach(e=>e.hidden=t!==2);
+ if(typeof buildPanel==='function')buildPanel(curSec);if(sc){scrFilter();scrSAmp();if(scrN!==scrFor(curSec))setScreen(scrFor(curSec))}}
+$('track').addEventListener('click',e=>{const b=e.target.closest('button');if(b)setTrack(+b.dataset.v)});
 let curSec='model';
 function showSec(k,noScreen){curSec=k;if(typeof buildPanel==='function')buildPanel(k);
  document.querySelectorAll('#keys .key').forEach(b=>{const on=b.dataset.k===k;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});
  document.querySelectorAll('section.sec').forEach(x=>x.hidden=x.id!=='s-'+k);
- if(!noScreen&&scrN!==SECSCR[k])setScreen(SECSCR[k])}
+ if(!noScreen&&scrN!==scrFor(k))setScreen(scrFor(k))}
 $('keys').addEventListener('click',e=>{const b=e.target.closest('.key');if(!b)return;showSec(b.dataset.k)});
 
 // wavetable page (osc440)
@@ -579,7 +609,7 @@ const WP=JSON.parse($('wpresets').textContent);
 const WDEF=new Float64Array(600);WP.defaults.forEach(([id,v])=>WDEF[id]=v);
 const wv=new Float64Array(WDEF);          // the sound as the engine has it
 let wOsc=0,wPre=0,wHeld=0,wChord=0,wPtsT=0;
-const wl={on:true,mode:0,oct:0,steps:16,hits:5,rot:2,prog:0};
+const wl={on:true,mode:0,style:0,oct:0,steps:16,hits:5,rot:2,prog:0};
 const OMODES=['Wavetable','Sine','Triangle','Saw','Pulse','Supersaw','Noise','Colored noise'];
 const OSHORT=['WT','SINE','TRI','SAW','PULSE','SUPERSAW','NOISE','C NOISE'];
 const LSHAPE=['SINE','TRI','SAW','SAW DN','SQUARE','PULSE','S&H','SMOOTH','EXP','STEPS'];
@@ -625,7 +655,7 @@ $('otable').addEventListener('click',e=>{const b=e.target.closest('button');if(!
 $('osync').addEventListener('click',()=>{if(!wOsc)return;wsetv(109+wOsc*16,wv[109+wOsc*16]>.5?0:1);oscHeader()});
 $('froute').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;wsetv(12,+b.dataset.r);oscHeader();scrWave()});
 // filter 1 and 2 models (osc440 parameters 20, 21), named by the engine
-function fillModels(){const o=names.map((n,i)=>`<option value="${i}">${i+1}. ${n}</option>`).join('');$('f1m').innerHTML=o;$('f2m').innerHTML=o;oscHeader();scrWave()}
+function fillModels(){const o=names.map((n,i)=>`<option value="${i}">${i+1}. ${n}</option>`).join('');['f1m','f2m','sf1m','sf2m'].forEach(id=>$(id).innerHTML=o);oscHeader();svUI();scrWave()}
 ['f1m','f2m'].forEach((id,j)=>$(id).addEventListener('change',()=>{wsetv(20+j,+$(id).value);scrWave()}));
 // presets
 const groups=[...new Set(WP.presets.map(p=>p.group))];
@@ -639,15 +669,17 @@ function loadPreset(i,auto){wPre=(i+WP.presets.length)%WP.presets.length;const p
 $('wpre').addEventListener('change',()=>loadPreset(+$('wpre').value,true));
 $('wprev').addEventListener('click',()=>loadPreset(wPre-1,true));$('wnext').addEventListener('click',()=>loadPreset(wPre+1,true));
 // play controls
-function setWMode(m){wl.mode=m;$('wmode').querySelectorAll('button').forEach(x=>x.classList.toggle('on',+x.dataset.m===m));
- document.querySelectorAll('.usewave').forEach(x=>{const on=+x.dataset.m===m;x.classList.toggle('on',on);x.setAttribute('aria-pressed',on)});send({t:'wcfg',k:0,v:m});scrWave()}
+function setWMode(m){wl.mode=m;if(m<3)wl.style=m;
+ $('wmode').querySelectorAll('button').forEach(x=>x.classList.toggle('on',+x.dataset.m===wl.style));segOn('seq1',m===4?1:m===3?2:0);
+ send({t:'wcfg',k:0,v:m});scrWave()}
+$('seq1').addEventListener('click',e=>{const b=e.target.closest('button');if(b)setWMode([wl.style,4,3][+b.dataset.v])});
 $('wmode').addEventListener('click',e=>{const b=e.target.closest('button');if(b)setWMode(+b.dataset.m)});
 function setProg(v){wl.prog=v;segOn('wprog',v);send({t:'wcfg',k:5,v});scrWave()}
 $('wprog').addEventListener('click',e=>{const b=e.target.closest('button');if(b)setProg(+b.dataset.v)});
 $('wmute').addEventListener('click',()=>{wl.on=!wl.on;$('wmute').textContent='Wave lane '+(wl.on?'on':'off');$('wmute').setAttribute('aria-pressed',wl.on);send({t:'wcfg',k:4,v:wl.on?0:1});scrWave()});
 function wPat(){const L={steps:wl.steps,hits:wl.hits,rot:wl.rot};$('wpat').innerHTML=Array.from({length:16},(_,s)=>`<i class="${hit(L,s)?'h':''}${s===stepNow?' cur':''}"></i>`).join('');
  $('woct').textContent=sgn(wl.oct);$('whits').textContent=wl.hits;$('wsteps').textContent=wl.steps;$('wrot').textContent=wl.rot}
-$('s-play').addEventListener('click',e=>{const b=e.target.closest('button[data-w]');if(!b)return;const d=+b.dataset.d,f=b.dataset.w;
+$('s-seq').addEventListener('click',e=>{const b=e.target.closest('button[data-w]');if(!b)return;const d=+b.dataset.d,f=b.dataset.w;
  if(f==='oct'){wl.oct=Math.max(-2,Math.min(2,wl.oct+d));send({t:'wcfg',k:1,v:wl.oct})}
  else{if(f==='steps')wl.steps=Math.max(1,Math.min(16,wl.steps+d));if(f==='hits')wl.hits=Math.max(0,Math.min(wl.steps,wl.hits+d));if(f==='rot')wl.rot=(wl.rot+d+wl.steps)%wl.steps;
   wl.hits=Math.min(wl.hits,wl.steps);send({t:'weuc',n:wl.steps,k:wl.hits,r:wl.rot})}
@@ -692,10 +724,17 @@ const LEDF=i=>30*Math.pow(16000/30,(2+i*4-2)/145);   // the LED columns' frequen
 const dbPx=h=>{const db=10*Math.log10(cmag(h)+1e-12);return Math.max(0,Math.min(GH,Math.round((db+36)/48*GH)))};
 // the FILTER screen's graph: filter 1 (left out when fully open, as osc440 does) and filter 2, each from its
 // model's transfer function, in series (the product) or parallel (the mean)
-function respWave(){if(!sc)return;const o=new Uint8Array(sc.e.memory.buffer,sc.e.scr_resp(1),64);
- const open=wv[2]>=135&&wv[3]===0,par=wv[12]>.5,t1=FTYPE[wv[20]]||'lp2',t2=FTYPE[wv[21]]||'lp2',f1=nhz(wv[2]),f2=nhz(wv[7]);
- for(let i=0;i<NCOL;i++){const f=LEDF(i),a=open?Cx(1,0):fresp(t1,f,f1,wv[3]),b=fresp(t2,f,f2,wv[8]);
-  o[i]=dbPx(par?Cx((a.r+b.r)/2,(a.i+b.i)/2):cm(a,b))}}
+// the shown track's VCF: models, cutoffs (MIDI notes), resonances, routing, drive; a filter fully open with no
+// resonance is left out (osc440 does so for filter 1, the sampler track for both)
+function vcfOf(t){return t===1?{m:[wv[20],wv[21]],c:[wv[2],wv[7]],r:[wv[3],wv[8]],par:wv[12]>.5,drv:wv[9],open:[wv[2]>=135&&wv[3]===0,false]}
+ :{m:ssv.m,c:ssv.cut,r:ssv.res,par:!!ssv.par,drv:ssv.drive,open:[0,1].map(j=>ssv.cut[j]>=135&&ssv.res[j]===0&&ssv.env===0)}}
+function respWave(){if(!sc)return;const o=new Uint8Array(sc.e.memory.buffer,sc.e.scr_resp(1),64),V=vcfOf(track);
+ for(let i=0;i<NCOL;i++){const f=LEDF(i),h=[0,1].map(j=>V.open[j]?Cx(1,0):fresp(FTYPE[V.m[j]]||'lp2',f,nhz(V.c[j]),V.r[j]));
+  o[i]=dbPx(V.par?Cx((h[0].r+h[1].r)/2,(h[0].i+h[1].i)/2):cm(h[0],h[1]))}}
+function scrFilter(){if(!sc)return;const V=vcfOf(track);sc.set(SS.sel,track-1);
+ if(names.length){sc.str(0,splitName(names[V.m[0]]||'')[0].slice(0,34));sc.str(1,splitName(names[V.m[1]]||'')[0].slice(0,34))}
+ sc.set(SS.f_svf,V.open[0]?0:Math.round(nhz(V.c[0])));sc.set(SS.f_lad,V.open[1]?0:Math.round(nhz(V.c[1])));sc.set(SS.f_svfn,Math.round(V.c[0]));sc.set(SS.f_ladn,Math.round(V.c[1]));
+ respWave();sc.set(SS.f_res,Math.round(V.r[1]*100));sc.set(SS.f_drv,Math.round(V.drv*10));sc.set(SS.f_par,V.par?1:0)}
 
 // the envelope selected: the only one on the screen and on the page; the encoders edit it
 let eFocus=1;
@@ -773,10 +812,7 @@ function scrWaveExtra(){if(!sc)return;
  const gk=WK.voc.find(k=>k.cfg===2);sc.set(SS.e_gate,Math.round((gk?gk.v:1.5)*10));
  const sh=Math.round(wv[301]);sc.str(8,LSH[sh]||'');sc.set(SS.l_rate,Math.round(wv[300]*100));sc.set(SS.l_dly,Math.round(wv[303]*1000));
  const lp=new Int8Array(sc.e.memory.buffer,sc.e.scr_lpts(),128);for(let i=0;i<128;i++)lp[i]=Math.max(-64,Math.min(63,Math.round(lfoShape(sh,i/128)*60)));
- const svfOut=wv[2]>=135&&wv[3]===0;   // fully open: osc440 leaves filter 1 out
- if(names.length){sc.str(0,splitName(names[wv[20]]||'')[0].slice(0,34));sc.str(1,splitName(names[wv[21]]||'')[0].slice(0,34))}
- sc.set(SS.f_svf,svfOut?0:Math.round(nhz(wv[2])));sc.set(SS.f_lad,Math.round(nhz(wv[7])));sc.set(SS.f_svfn,Math.round(wv[2]));sc.set(SS.f_ladn,Math.round(wv[7]));
- respWave();sc.set(SS.f_res,Math.round(wv[8]*100));sc.set(SS.f_drv,Math.round(wv[9]*10));sc.set(SS.f_par,wv[12]>.5?1:0)}
+ scrFilter()}
 function scrWave(k){if(!sc)return;const b=100+wOsc*16,p=WP.presets[wPre];
  sc.str(5,p.name.toUpperCase().slice(0,20));sc.str(6,wv[b]===0?'WT '+(wv[b+1]?'PLAITS A':'BASIC'):OSHORT[wv[b]]||'');
  sc.str(7,(CHORDS[wl.prog][wChord]+' '+PMODE[wl.mode]).slice(0,13));sc.str(11,CHORDS[wl.prog].join('|'));
@@ -806,7 +842,6 @@ Object.entries(MK).forEach(([pg,list])=>list.forEach(k=>{k.k='m'+(mkN++);k.d=k.v
 const MSEG={shscale:[0,3,0],shgate:[0,4,0],mbmodel:[1,0,0],mbrate:[1,1,2],mbscale:[1,9,0],mbrange:[1,10,0],tdramp:[2,5,1],tdout:[2,6,2],bqual:[3,10,3],bseed:[3,11,0]};
 Object.keys(MSEG).forEach(id=>$(id).addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;MSEG[id][2]=+b.dataset.v;
  $(id).querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));msend(MSEG[id][0],MSEG[id][1],MSEG[id][2]);scrMods()}));
-document.querySelectorAll('.usewave').forEach(b=>b.addEventListener('click',()=>setWMode(wl.mode===+b.dataset.m?0:+b.dataset.m)));
 // Tides routing
 const DESTS=['Off','Osc 1 wave','Osc 2 wave','Osc 3 wave','Filter 2 cut','Filter 1 cut','Filter 1 res','Osc 1 PW','Filter 2 res','Beads time','Beads size','Beads pitch','Beads density'];
 const routeK=[];
@@ -831,9 +866,8 @@ function scrMods(){if(!sc)return;
   mscreen('MARBLES',`${md}  ${rt}  DEJA VU ${pct(MKV('marbles',4))}  LEN ${MKV('marbles',5)}`,[['BIAS',Math.round(MKV('marbles',2)*100)],['JIT',Math.round(MKV('marbles',3)*100)],['SPR',Math.round(MKV('marbles',6)*100)],['STP',Math.round(MKV('marbles',8)*100)]])}
  if(scrN===6){const rm=['AD','LOOPING','AR'][MSEG.tdramp[2]],om=['GATES','AMPLITUDE','SLOPE PHASE','FREQUENCY'][MSEG.tdout[2]];
   mscreen('TIDES',`${rm}  ${om}  ${MKV('tides',0).toPrecision(3)}HZ`,[['SHP',Math.round(MKV('tides',1)*100)],['SLP',Math.round(MKV('tides',2)*100)],['SMO',Math.round(MKV('tides',3)*100)],['SHF',Math.round(MKV('tides',4)*100)]])}
- if(scrN===11){const q=['DIRTY TAPE','CLEAN TAPE','VINTAGE','DIGITAL'][MSEG.bqual[2]],sd=['DENSITY','NOTES','16THS'][MSEG.bseed[2]];
-  mscreen('BEADS',`${q}  SEED ${sd}${bst.freeze?'  FREEZE':''}${bst.on?'':'  BYPASS'}`,[['TIME',Math.round(MKV('beads',1)*100)],['SIZE',Math.round(MKV('beads',2)*100)],['PIT',sgn(MKV('beads',4))],['WET',Math.round(MKV('beads',7)*100)]])}}
- if(scrN===9||scrN===11)modsInfo(lastMods||new Array(30).fill(0))
+ scrFx()}
+ if(scrN===9||scrN===14)modsInfo(lastMods||new Array(30).fill(0))
 let lastMods=null;
 // TIDES screen: a second Tides 2 slope generator (tides_view/tides_cycle.cc) renders 1 or 2 clean cycles (the
 // View switch) with the settings the engine's Tides runs with, so the picture fills the width at any rate,
@@ -849,14 +883,14 @@ $('tdcyc').addEventListener('click',e=>{const b=e.target.closest('button');if(!b
 segOn('tdcyc',cfg.tdc);
 function modsInfo(a){lastMods=a;if(!sc)return;
  if(scrN===9){sc.e.scr_shift_state(a[0]|0,a[1]|0);const h=new Int8Array(sc.e.memory.buffer,sc.e.scr_shift_hist(),16);for(let i=0;i<16;i++)h[i]=a[2+i]<0?-1:Math.min(127,a[2+i])}
- if(scrN===11){const lv=x=>Math.max(0,Math.min(100,Math.round((20*Math.log10(x+1e-6)+48)/48*100)));
+ if(scrN===14){const lv=x=>Math.max(0,Math.min(100,Math.round((20*Math.log10(x+1e-6)+48)/48*100)));
   sc.e.scr_beads_state(Math.round(MKV('beads',1)*100),Math.round(MKV('beads',2)*100),Math.round(MKV('beads',5)*100),Math.round((MKV('beads',4)+24)/48*100),bst.freeze?1:0,lv(a[28]),bst.on?lv(a[29]):0)}}
 function marblesStep(mb){if(!sc)return;const r=[2,5,10][MSEG.mbrange[2]],lo=MSEG.mbrange[2]===2?-5:0,n=v=>Math.max(0,Math.min(255,Math.round((v-lo)/r*255)));
  sc.e.scr_marbles_push((mb[0]?1:0)|(mb[1]?2:0),n(mb[2]),n(mb[3]))}
 
 // ---- sampler
 const SR=44100;
-const ss={on:1,mode:1,slices:16,auto:1,pmode:1,nb:1,b:[0,1],order:0,rev:0,steps:16,hits:12,rot:0,name:'DEMO BREAK',len:-1,pcm:null,rec:0,prog:0,last:-1,pos:[-1,-1,-1,-1],ov:null,trig:0};
+const ss={seq:0,on:1,mode:1,slices:16,auto:1,pmode:1,nb:1,b:[0,1],order:0,rev:0,steps:16,hits:12,rot:0,name:'DEMO BREAK',len:-1,pcm:null,rec:0,prog:0,last:-1,pos:[-1,-1,-1,-1],ov:null,trig:0};
 const SK=[{k:'s0',key:0,l:'Start',min:0,max:1,st:.001,v:0,f:pct},{k:'s1',key:1,l:'End',min:0,max:1,st:.001,v:1,f:pct},
  {k:'s2',key:2,l:'Pitch',bi:1,min:-24,max:24,st:1,v:0,f:v=>sgn(v,' st')},{k:'s14',key:14,l:'Fine',bi:1,min:-100,max:100,st:1,v:0,f:v=>sgn(v,' ct')},
  {k:'s3',key:3,l:'Level',min:0,max:1,st:.01,v:.7,f:pct},{k:'s17',key:17,l:'Auto sens',min:0,max:1,st:.01,v:.5,f:pct},
@@ -864,8 +898,29 @@ const SK=[{k:'s0',key:0,l:'Start',min:0,max:1,st:.001,v:0,f:pct},{k:'s1',key:1,l
  {k:'s5',key:5,l:'Decay',min:0,max:3000,st:10,v:0,f:v=>v<=0?'Hold':v<1000?Math.round(v)+' ms':(v/1000).toFixed(2)+' s'}];
 const ssend=(k,v)=>send({t:'sset',k,v});
 const SKV=key=>SK.find(k=>k.key===key).v;
-SK.forEach(k=>{k.d=k.v;encoder($('sk'),k,k=>{ssend(k.key,k.v);scrSampler()})});
-function sendSmpAll(){SK.forEach(k=>ssend(k.key,k.v));ssend(6,ss.mode);ssend(7,ss.slices);ssend(16,ss.auto);ssend(15,ss.pmode);ssend(8,ss.order);ssend(9,ss.rev);ssend(10,ss.on);
+SK.forEach(k=>{k.d=k.v;encoder($([3,4,5].includes(k.key)?'sk-amp':'sk'),k,k=>{ssend(k.key,k.v);scrSampler();scrSAmp()})});   // level, attack, decay: its AMP
+$('seq2').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;ss.seq=+b.dataset.v;segOn('seq2',ss.seq);ssend(20,ss.seq)});
+// the sampler track's VCF (engine keys 21-30), as the osc track's: two models in series or parallel, plus a filter envelope
+const ssv={m:[17,4],cut:[135,135],res:[0,0],par:0,drive:1,env:0,envMs:200};
+const SV=[
+ {host:'sv-f1',l:'Cutoff',min:20,max:135,st:1,f:v=>v>=135?'Open':''+v,get:()=>ssv.cut[0],put:v=>{ssv.cut[0]=v;ssend(23,v)}},
+ {host:'sv-f1',l:'Resonance',min:0,max:1,st:.01,f:pct,get:()=>ssv.res[0],put:v=>{ssv.res[0]=v;ssend(25,v)}},
+ {host:'sv-f2',l:'Cutoff',min:20,max:135,st:1,f:v=>v>=135?'Open':''+v,get:()=>ssv.cut[1],put:v=>{ssv.cut[1]=v;ssend(24,v)}},
+ {host:'sv-f2',l:'Resonance',min:0,max:1,st:.01,f:pct,get:()=>ssv.res[1],put:v=>{ssv.res[1]=v;ssend(26,v)}},
+ {host:'sv-f2',l:'Drive',min:1,max:4,st:.05,f:v=>v.toFixed(2),get:()=>ssv.drive,put:v=>{ssv.drive=v;ssend(28,v)}},
+ {host:'sv-env',l:'Amount',bi:1,min:-48,max:72,st:1,f:v=>sgn(v,' st'),get:()=>ssv.env,put:v=>{ssv.env=v;ssend(29,v)}},
+ {host:'sv-env',l:'Decay',exp:1,min:10,max:3000,f:v=>v<1000?Math.round(v)+' ms':(v/1000).toFixed(2)+' s',get:()=>ssv.envMs,put:v=>{ssv.envMs=v;ssend(30,v)}}];
+SV.forEach((k,i)=>{k.k='sv'+i;k.v=k.d=k.get();encoder($(k.host),k,k=>{k.put(k.v);scrFilter();scrSAmp()})});
+function svUI(){SV.forEach(k=>{k.v=k.get();k.draw()});if(names.length){$('sf1m').value=ssv.m[0];$('sf2m').value=ssv.m[1]}segOn('sroute',ssv.par)}
+['sf1m','sf2m'].forEach((id,j)=>$(id).addEventListener('change',()=>{ssv.m[j]=+$(id).value;ssend(21+j,ssv.m[j]);scrFilter()}));
+$('sroute').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;ssv.par=+b.dataset.v;segOn('sroute',ssv.par);ssend(27,ssv.par);scrFilter()});
+const pSModel=j=>VP('Model '+(j+1),0,26,()=>ssv.m[j],i=>{$('sf'+(j+1)+'m').value=i;$('sf'+(j+1)+'m').dispatchEvent(new Event('change'))},i=>names[i]?splitName(names[i])[0]:''+(i+1));
+const SVK=l=>SV.find(k=>k.l===l&&true);
+// the sampler's AMP screen: its attack / decay and level, the filter envelope beside it
+function scrSAmp(){if(!sc)return;sc.set(SS.sa_atk,Math.round(SKV(4)));sc.set(SS.sa_dec,Math.round(SKV(5)));sc.set(SS.sa_lvl,Math.round(SKV(3)*100));
+ sc.set(SS.sa_fenv,Math.round(ssv.env));sc.set(SS.sa_fdec,Math.round(ssv.envMs))}
+function sendSmpAll(){SK.forEach(k=>ssend(k.key,k.v));ssend(20,ss.seq);[21,22].forEach((key,j)=>ssend(key,ssv.m[j]));
+ ssend(23,ssv.cut[0]);ssend(24,ssv.cut[1]);ssend(25,ssv.res[0]);ssend(26,ssv.res[1]);ssend(27,ssv.par);ssend(28,ssv.drive);ssend(29,ssv.env);ssend(30,ssv.envMs);ssend(6,ss.mode);ssend(7,ss.slices);ssend(16,ss.auto);ssend(15,ss.pmode);ssend(8,ss.order);ssend(9,ss.rev);ssend(10,ss.on);
  ssend(11,ss.steps);ssend(12,ss.hits);ssend(13,ss.rot);if(ss.pcm)send({t:'sload',pcm:ss.pcm})}
 const SSEG={smode:['mode',6],sslices:['slices',7],sorder:['order',8],spmode:['pmode',15]};
 Object.keys(SSEG).forEach(id=>$(id).addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const [f,key]=SSEG[id];ss[f]=+b.dataset.v;
@@ -954,14 +1009,14 @@ function lofiScene(){
  tset(WK.f1[0],100);tset(WK.f1[1],.1);tset(WK.f1[2],6);
  tset(WK.f2[0],86);tset(WK.f2[1],.12);tset(WK.f2[2],12);tset(WK.f2[3],1.2);
  if($('froute').querySelector('.on')?.dataset.r!=='0')$('froute').querySelector('[data-r="0"]').click();
- $('sdemo').click();if(!ss.on)$('son').click();
+ $('sdemo').click();if(!ss.on)$('son').click();$('seq2').querySelector('[data-v="0"]').click();
  $('spmode').querySelector('[data-v="0"]').click();$('sorder').querySelector('[data-v="0"]').click();
  tset(SKK(2),-3);tset(SKK(3),.45);
  ss.steps=16;ss.hits=16;ss.rot=0;ssend(11,16);ssend(12,16);ssend(13,0);sPat();
  if(!vst.on)$('von').click();
  tset(VK.vcomp,64);tset(VK.vin,-6);tset(VK.vout,-6);tset(VK.vnoise,48);tset(VK.vwow,40);   // -6 / -6: no clipping
  if(bst.on)$('bon').click();
- showSec('play')}
+ showSec('seq')}
 $('lofi').addEventListener('click',lofiScene);
 
 // audio
@@ -1029,30 +1084,33 @@ const pSHits=stepVP('Hits',0,16,()=>ss.hits,'[data-s="hits"]');
 const pVOn=togVP('Vinyl',()=>vst.on,'von');
 // [parameter, 3-letter footer label]
 const PAGES={
- model:[[WK.f1[0],'CT1'],[WK.f1[1],'RS1'],[WK.f2[0],'CT2'],[WK.f2[1],'RS2'],[pModel(0),'MD1'],[pModel(1),'MD2'],[segVP('froute','Routing'),'RTE'],[WK.f2[3],'DRV']],
+ model:()=>track===1?[[WK.f1[0],'CT1'],[WK.f1[1],'RS1'],[WK.f2[0],'CT2'],[WK.f2[1],'RS2'],[pModel(0),'MD1'],[pModel(1),'MD2'],[segVP('froute','Routing'),'RTE'],[WK.f2[3],'DRV']]
+  :[[SV[0],'CT1'],[SV[1],'RS1'],[SV[2],'CT2'],[SV[3],'RS2'],[pSModel(0),'MD1'],[pSModel(1),'MD2'],[segVP('sroute','Routing'),'RTE'],[SV[5],'ENV']],
  shift:[[MKK('shift',0),'LEN'],[MKK('shift',1),'CHG'],[MKK('shift',2),'RNG'],[segVP('shscale','Scale'),'SCL'],[segVP('shgate','Gate'),'GAT'],[pOct,'OCT'],[pTempo,'BPM'],[WVOC('Gate'),'LEN']],
  marbles:[[MKK('marbles',0),'BIA'],[MKK('marbles',1),'JIT'],[MKK('marbles',2),'DJV'],[MKK('marbles',3),'LEN'],[MKK('marbles',4),'SPR'],[MKK('marbles',5),'XB'],[MKK('marbles',6),'STP'],[segVP('mbmodel','T model'),'MDL']],
- play:[[pPre,'PRE'],[segVP('wmode','Mode'),'MOD'],[pOct,'OCT'],[WVOC('Gate'),'GAT'],[wStep('Hits','hits',0,16),'HIT'],[wStep('Steps','steps',1,16),'STP'],[wStep('Rotate','rot',0,15),'ROT'],[WVOC('Volume'),'VOL']],
+ seq:()=>track===1?[[segVP('seq1','Sequencer'),'SEQ'],[segVP('wmode','Style'),'STY'],[pOct,'OCT'],[WVOC('Gate'),'GAT'],[wStep('Hits','hits',0,16),'HIT'],[wStep('Steps','steps',1,16),'STP'],[wStep('Rotate','rot',0,15),'ROT'],[pTempo,'BPM']]
+  :[[segVP('seq2','Sequencer'),'SEQ'],[segVP('sorder','Order'),'ORD'],null,null,[pSHits,'HIT'],[stepVP('Steps',1,16,()=>ss.steps,'[data-s="steps"]'),'STP'],[stepVP('Rotate',0,15,()=>ss.rot,'[data-s="rot"]'),'ROT'],[pTempo,'BPM']],
  osc:[[WK.osc[0],'WAV'],[WK.osc[1],'WEN'],[WK.osc[2],'TUN'],[WK.osc[3],'FIN'],[segVP('oscsel','Osc'),'OSC'],[WK.osc[4],'LVL'],[WK.osc[5],'PW'],[WK.osc[6],'FM']],
- env:[[envP(0),'ATK'],[envP(1),'DEC'],[envP(2),'SUS'],[envP(3),'REL'],[pEnv,'ENV'],[pEMode,'CRV'],[WVOC('Gate'),'GAT'],[e3K,'E3A']],
+ env:()=>track===1?[[envP(0),'ATK'],[envP(1),'DEC'],[envP(2),'SUS'],[envP(3),'REL'],[pEnv,'ENV'],[pEMode,'CRV'],[WVOC('Gate'),'GAT'],[e3K,'E3A']]
+  :[[SKK(4),'ATK'],[SKK(5),'DEC'],[SKK(3),'LVL'],null,[SV[5],'FEN'],[SV[6],'FDC'],null,null],
  tides:[[MKK('tides',0),'RAT'],[MKK('tides',1),'SHP'],[MKK('tides',2),'SLP'],[MKK('tides',3),'SMO'],[MKK('tides',4),'SHF'],[routeK[0],'O1'],[routeK[1],'O2'],[segVP('tdramp','Ramp'),'RMP']],
  matrix:[[pSlot,'SLT'],[pSrc,'SRC'],[pDst,'DST'],[pAmt,'AMT'],[WVOC('Level'),'LVL'],[WK.f2[0],'CUT'],[WK.f2[1],'RES'],[WK.osc[0],'WAV']],
- sampler:[[SKK(0),'STA'],[SKK(1),'END'],[SKK(2),'PIT'],[SKK(14),'FIN'],[SKK(17),'SNS'],[pSHits,'HIT'],[SKK(5),'DEC'],[SKK(3),'LVL']],
- beads:[[MKK('beads',0),'TIM'],[MKK('beads',1),'SIZ'],[MKK('beads',3),'PIT'],[MKK('beads',4),'DNS'],[MKK('beads',2),'SHP'],[MKK('beads',5),'FB'],[MKK('beads',6),'WET'],[MKK('beads',7),'REV']],
- vinyl:[[VK.vcomp,'CMP'],[VK.vnoise,'NOI'],[VK.vwow,'WOW'],[VK.vin,'IN'],[VK.vout,'OUT'],[pVOn,'ON'],[segVP('vmode','Comp mode'),'MOD'],null],
+ sampler:[[SKK(0),'STA'],[SKK(1),'END'],[SKK(2),'PIT'],[SKK(14),'FIN'],[SKK(17),'SNS'],[segVP('sslices','Slices'),'SLC'],[segVP('smode','Mode'),'MOD'],[segVP('spmode','Pitch'),'PMD']],
+ fx:[[MKK('beads',0),'TIM'],[MKK('beads',1),'SIZ'],[MKK('beads',4),'DNS'],[MKK('beads',6),'WET'],[togVP('Beads',()=>bst.on,'bon'),'BDS'],[VK.vnoise,'NOI'],[VK.vwow,'WOW'],[pVOn,'VNL']],
 };
 const tget=t=>t.get?t.get():t.v;
 const tset=(t,v)=>{if(t.set)t.set(v);else{t.v=v;t.draw&&t.draw();t.onv&&t.onv(t)}};
 const short=(lbl,s)=>(''+s).toUpperCase().replace(/\s*(ST|DB|BPM|CT|OCT|16TH|HZ|MS)$/,'').replace(/\s+/g,'').slice(0,Math.max(2,8-lbl.length));
 let prox=[],footCache=[];
-function buildPanel(pg){const map=PAGES[pg]||[];prox=[];footCache=[];
+const pageMap=pg=>{const m=PAGES[pg];return (typeof m==='function'?m():m)||[]};
+function buildPanel(pg){const map=pageMap(pg);prox=[];footCache=[];
  for(let r=0;r<2;r++){const host=$('pk'+r);host.innerHTML='';
   for(let i=r*4;i<r*4+4;i++){const e=map[i];
    if(!e||!e[0]){host.insertAdjacentHTML('beforeend','<div class="nil"></div>');prox[i]=null;continue}
    const t=e[0],px={k:'p'+i,l:t.l,min:t.min,max:t.max,st:t.st,exp:t.exp,bi:t.bi,f:v=>t.f(v),v:tget(t),d:t.d};
    px.t=t;prox[i]=px;encoder(host,px,p=>{tset(t,p.v);panelSync()})}}
  panelSync()}
-function panelSync(){const map=PAGES[curSec]||[];
+function panelSync(){const map=pageMap(curSec);
  prox.forEach(px=>{if(!px)return;const v=tget(px.t);if(v!==px.v&&!$('k-'+px.k).classList.contains('act')){px.v=v;px.draw()}});
  if(!sc)return;
  for(let i=0;i<8;i++){const e=map[i],txt=e&&e[0]?e[1]+'|'+short(e[1],e[0].f(tget(e[0]))):'';

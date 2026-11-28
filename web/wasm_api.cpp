@@ -2,6 +2,7 @@
 // sampler, Marbles, Tides and Beads, on one 16th-note clock
 #include "wave/wave_lane.h"
 #include "synth/sst_filter.h"
+#include "config/audio_config.h"
 #include "mods/mods.h"
 #include <cmath>
 
@@ -16,6 +17,21 @@ static struct Clock { float bpm = 120.f, swing = 0.f; int step = 0, bar = 0; dou
 static constexpr int kSmpFrames = 1 << 21;
 static float smpRam[kSmpFrames];
 static Sampler smp;
+// The sampler track: its sequencer and its VCF (two sst-filters models, as the osc440 voice has). Each filter is
+// left out while fully open with no resonance (the defaults), so the sampler alone sounds as before.
+static struct SmpTrack
+{
+    int seq = 0;                       // 0 its Euclidean lane, 1 Marbles (t2 hits, X2 picks the slice), 2 shift register
+    synth::SstFilter f[2];
+    int model[2] = {17, 4};            // Cytomic SVF LP, Huovilainen ladder
+    float cut[2] = {135.f, 135.f};     // MIDI notes; 135: open
+    float res[2] = {0.f, 0.f};
+    bool parallel = false;
+    float drive = 1.f;
+    float envAmt = 0.f, envMs = 200.f; // filter envelope: semitones, decay; restarts on every hit
+    float env = 0.f;
+    unsigned lastTrig = 0;
+} trk;
 static float smpInfo[32];
 static uint8_t smpOv[256];
 static WaveLane wave;
@@ -74,15 +90,18 @@ API void fl_render()
         double sp16 = sampleRate * 60.0 / clk.bpm / 4.0;
         int step = (st + 15) % 16;
         wave.Tick(step, bar, sp16);
+        smp.external = trk.seq != 0;
         smp.Tick(step, bar, sp16);
-        if (wave.mode == WaveLane::kShift)
+        if (wave.mode == WaveLane::kShift || trk.seq == 2)
         {
-            // the register advances on every 16th; the gate mode decides which steps play
+            // the register advances on every 16th (once, whichever tracks it plays); the gate mode decides which
+            // steps play: each track's Euclidean hits, bit 0, or every 16th
             bool bit0 = false;
             int n = shiftReg.Step(bit0);
-            bool play = shiftReg.gateMode == 0 ? wave.Hit(step) : (shiftReg.gateMode == 1 ? bit0 : true);
-            if (play)
+            if (wave.mode == WaveLane::kShift && (shiftReg.gateMode == 0 ? wave.Hit(step) : (shiftReg.gateMode == 1 ? bit0 : true)))
                 wave.ExternalNote(45 + 12 * wave.octave + n - 12, step % 4 == 0 ? 0.95f : 0.8f, wave.gate * sp16);
+            if (trk.seq == 2 && smp.on && (shiftReg.gateMode == 0 ? smp.Hit(step) : (shiftReg.gateMode == 1 ? bit0 : true)))
+                smp.Trigger((shiftReg.reg & 0xff) * smp.NumSlices() / 256);   // the register's low byte picks the slice
         }
         tick = true;
     }
@@ -94,6 +113,14 @@ API void fl_render()
         for (int c = 0; c < 3; c += 2)          // t1 plays X1, t3 plays X3
             if (marbles.rise[c])
                 wave.ExternalNote(45 + 12 * wave.octave + (int)std::lround(marbles.x[c] * 12.f), c ? 0.75f : 0.9f, wave.gate * sp16);
+    }
+    if (trk.seq == 1 && smp.on && marbles.rise[1])          // t2 plays the sampler, X2 picks the slice
+    {
+        static const float kLo[3] = {0.f, 0.f, -5.f}, kHi[3] = {2.f, 5.f, 5.f};   // the X range, volts
+        int r = marbles.range < 0 ? 0 : (marbles.range > 2 ? 2 : marbles.range);
+        float u = (marbles.x[1] - kLo[r]) / (kHi[r] - kLo[r]);
+        u = u < 0.f ? 0.f : (u > 0.999f ? 0.999f : u);
+        smp.Trigger((int)(u * smp.NumSlices()));
     }
     // Tides, every block: the wave lane's notes are its gate (for AD / AR)
     mods::TidesStep(tides, sampleRate / kBlock, wave.notesHeld > 0);
@@ -110,7 +137,40 @@ API void fl_render()
     for (int i = 0; i < kBlock; ++i) { outL[i] += waveL[i]; outR[i] += waveR[i]; }
     // the sampler: resamples the filter lab + wave lane mix, then plays into it (before Beads and the Vinyl Sim)
     smp.Capture(outL, outR, kBlock);
-    smp.Render(outL, outR, kBlock);
+    {
+        // the sampler track: sample (with its attack / decay, the AMP) -> VCF -> into the mix
+        static float sL[kBlock], sR[kBlock];
+        for (int i = 0; i < kBlock; ++i) sL[i] = sR[i] = 0.f;
+        smp.Render(sL, sR, kBlock);
+        if (smp.Triggers() != trk.lastTrig) { trk.lastTrig = smp.Triggers(); trk.env = 1.f; }
+        const float envK = std::exp(-(float)kBlock / (trk.envMs * 0.001f * sampleRate));
+        const int H = (int)audio::kBlockSize;          // the filters ramp over osc440's block
+        for (int o = 0; o < kBlock; o += H)
+        {
+            bool open[2];
+            for (int j = 0; j < 2; ++j)
+            {
+                open[j] = trk.cut[j] >= 134.99f && trk.res[j] == 0.f && trk.envAmt == 0.f;
+                trk.f[j].set_model(trk.model[j]);
+                if (!open[j]) trk.f[j].set(trk.cut[j] + trk.envAmt * trk.env, trk.res[j]);
+            }
+            float *x = sL + o, y[audio::kBlockSize];
+            if (trk.parallel)
+            {
+                for (int i = 0; i < H; ++i) y[i] = x[i] * trk.drive;
+                if (!open[0]) trk.f[0].process_block(x, H);
+                if (!open[1]) trk.f[1].process_block(y, H);
+                for (int i = 0; i < H; ++i) x[i] = 0.5f * (x[i] + y[i]);
+            }
+            else
+            {
+                if (!open[0]) trk.f[0].process_block(x, H);
+                if (!open[1]) { for (int i = 0; i < H; ++i) x[i] *= trk.drive; trk.f[1].process_block(x, H); }
+            }
+        }
+        trk.env *= envK;
+        for (int i = 0; i < kBlock; ++i) { outL[i] += sL[i]; outR[i] += sL[i]; }
+    }
     // Beads on the mix, before the Vinyl Sim (which runs in the worklet)
     if (beads.on)
     {
@@ -236,6 +296,15 @@ API void fl_smp_set(int key, float v)
     case 13: smp.rotate = (int)v; break;
     case 14: smp.fine = v; break; case 15: smp.pitchMode = (int)v; break;
     case 16: smp.autoSlice = v > 0.5f; break; case 17: smp.sens = v; break;
+    // the sampler track: sequencer, VCF
+    case 20: trk.seq = (int)v; break;
+    case 21: case 22: trk.model[key - 21] = (int)v; break;
+    case 23: case 24: trk.cut[key - 23] = v; break;
+    case 25: case 26: trk.res[key - 25] = v; break;
+    case 27: trk.parallel = v > 0.5f; break;
+    case 28: trk.drive = v; break;
+    case 29: trk.envAmt = v; break;
+    case 30: trk.envMs = v < 1.f ? 1.f : v; break;
     }
     smp.Update();
 }

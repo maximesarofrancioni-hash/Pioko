@@ -119,7 +119,7 @@ void Sampler::Tick(int step, int bar, double samplesPer16th)
         m_recPos = 0; m_rec = 2;
         for (Voice &v : m_v) v.active = false;
     }
-    if (m_rec == 2 || !on || m_len < 64) return;
+    if (m_rec == 2 || !on || m_len < 64 || external) return;
     Update();
     if (!Hit(step)) return;
     int n = m_nSlices;

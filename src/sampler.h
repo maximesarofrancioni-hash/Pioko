@@ -46,6 +46,7 @@ public:
     bool reverse = false;
     bool on = true;
     int steps = 16, hits = 12, rotate = 0;   // its lane
+    bool external = false;                // hits come from outside (Trigger()); Tick() only runs the resampling
 
     // sequencing: call on every new 16th (step 0..15, bar, samples per 16th)
     bool Hit(int step) const;

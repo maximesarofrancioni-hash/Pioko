@@ -143,17 +143,25 @@ taskbar.
 
 ## Browser version
 
-The browser version is a different instrument from the Pi kernel: osc440's voice (the 3rd Wave-style
-TripleWaveGroup, 16 voices) on a Euclidean lane, with **two sst-filters models per voice**, in series or parallel.
-Filter 1 sits in osc440's SVF place and filter 2 in its ladder's, with the same cutoff, resonance, envelope 1 amount
-and matrix destinations; each can be any of the 27 models the Pi kernel tours (`synth/sst_filter.cpp`). With them:
-the sampler, the shift register, Mutable Instruments Marbles, Tides 2 and Beads, and the SP-303 Vinyl Sim.
+The browser version is a different instrument from the Pi kernel, laid out as a signal path in two tracks:
 
-Pages (Elektron-style keys): FILTER | SHIFT (Turing Machine-style register), MARBLES | PLAY, OSC, ENV (osc440) |
-SAMPLER | TIDES (Tides 2, 4 outputs routed to osc440's oscillators and filters or Beads), MATRIX | BEADS, VINYL.
-Tempo and swing are in the header. The PLAY page's **Lofi hip hop** button sets up a whole sequence: 78 BPM,
-62% swing, the e-piano on Fmaj9 Em9 Dm9 Cmaj9 through warm low passes, the demo break slowed by varispeed, the
-Vinyl Sim's noise and wow.
+```
+            SEQ (per track: Euclid | Marbles | shift register)
+Track 1:  OSC (osc440, 16 voices) -> VCF (2 sst filters) -> AMP (env 2) --+
+Track 2:  SAMPLER                 -> VCF (2 sst filters) -> AMP (att/dec) +-> FX: Beads -> Vinyl Sim
+```
+
+Each track's VCF is two sst-filters models (any of the 27 the Pi kernel tours, `synth/sst_filter.cpp`) in series or
+parallel. On the osc track they sit in each osc440 voice (filter 1 in its SVF's place, filter 2 in its ladder's, with
+envelope 1, key tracking and the matrix); on the sampler track they filter its output, with their own filter
+envelope. Each track picks its sequencer: its own Euclidean pattern, Marbles (T1 / X1 and T3 / X3 play osc440, T2
+plays the sampler with X2 choosing the slice) or the shift register (notes for osc440, its low byte choosing the
+slice for the sampler). The FX page switches Beads and the Vinyl Sim on and off.
+
+Page keys, left to right: SEQ (SEQ, MARBLES, SHIFT) | GEN (OSC, SAMPLER) | VCF (FILTER) | AMP (ENV) | MOD (TIDES,
+MATRIX) | FX. The header holds tempo, swing and the track the SEQ, FILTER and ENV pages show. SEQ's **Lofi hip hop**
+button sets up a whole sequence: 78 BPM, 62% swing, the e-piano on Fmaj9 Em9 Dm9 Cmaj9 through warm low passes, the
+demo break slowed by varispeed, the Vinyl Sim's noise and wow.
 
 The display is 150 x 112, shown at 4x on a 600 x 450 AMOLED. Its footer has two parameter lines: line 1 is what
 the four front panel encoders turn on the current page, line 2 the four encoders under the screen (the page maps eight
