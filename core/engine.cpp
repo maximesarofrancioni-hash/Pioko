@@ -1,21 +1,20 @@
-// C API for the browser build: osc440's voice (two sst-filters models per voice) on a Euclidean lane, the
-// sampler, Marbles, Tides and Beads, on one 16th-note clock
-#include "wave/wave_lane.h"
+// Pyoko's engine: two tracks (osc440's voice with two sst-filters models per voice; the sampler through its own
+// two) sequenced by their Euclidean patterns, Marbles or the shift register, Tides modulating, Beads on the mix, all
+// on one 16th-note clock. Its C API (engine.h) is the WebAssembly exports of the browser build and what the Pi 4
+// kernel and the host renderer call. The platform supplies the sampler's memory (pyoko_sample_ram()).
+#include "engine.h"
+#include "wave_lane.h"
+#include "sampler.h"
+#include "mods/mods.h"
 #include "synth/sst_filter.h"
 #include "config/audio_config.h"
-#include "mods/mods.h"
 #include <cmath>
-
-#include "../src/sampler.h"
-static constexpr int kBlock = 32;   // frames per fl_render()
+static constexpr int kBlock = FL_BLOCK;   // frames per fl_render()
 // the sequencer clock: 16ths at `bpm`, resolved at block starts; step counts 1..16 after each tick, as
 // filter-lab's did (the page and the wave lane read it that way)
 // swing: each pair of 16ths lasts two 16ths, the first (1 + swing) of one, the second (1 - swing); 0 = straight,
 // 1/3 = triplet
 static struct Clock { float bpm = 120.f, swing = 0.f; int step = 0, bar = 0; double toNext = 0.0; } clk;
-// the sampler's RAM: 2^21 mono frames (47.5 s at 44.1 kHz, 8 MB) in the page; on the Pi a static array too
-static constexpr int kSmpFrames = 1 << 21;
-static float smpRam[kSmpFrames];
 static Sampler smp;
 // The sampler track: its sequencer and its VCF (two sst-filters models, as the osc440 voice has). Each filter is
 // left out while fully open with no resonance (the defaults), so the sampler alone sounds as before.
@@ -48,7 +47,7 @@ static unsigned lastNoteOns = 0;
 static float applied[16];          // Tides offset applied per destination last block
 static float outL[kBlock], outR[kBlock];
 
-#define API extern "C" __attribute__((used, visibility("default")))
+#define API extern "C" __attribute__((used, visibility("default")))   // exported from the WebAssembly build
 
 API void fl_init(float sr)
 {
@@ -57,7 +56,9 @@ API void fl_init(float sr)
     mods::MarblesInit(sr / kBlock);
     mods::TidesInit();
     mods::BeadsInit();
-    smp.Init(smpRam, kSmpFrames, sr); smp.MakeDemo();
+    int frames = 0;
+    float *ram = pyoko_sample_ram(&frames);
+    smp.Init(ram, frames, sr); smp.MakeDemo();
 }
 
 // Tides destinations: osc440 parameter id (or -1 for the others) and the range of a full-scale output

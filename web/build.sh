@@ -5,7 +5,7 @@
 #   - a second Tides 2 slope generator that draws the TIDES screen's cycle (tides_view/) -> tides_view.wasm
 #   - the SP-303 Vinyl Sim JS engine (vinyl_engine.js, vinyl_data.json)
 #   - osc440's presets (../osc440bridge/presets.json, made by ../osc440bridge/dump_presets.cpp)
-#   - Mutable Instruments Beads, Marbles, Tides 2 (pichenettes/eurorack + stmlib, MIT) and the shift register (mods/)
+#   - Mutable Instruments Beads, Marbles, Tides 2 (pichenettes/eurorack + stmlib, MIT) and the shift register (../core/mods/)
 # LIBS_DIR: sst-filters, sst-basic-blocks, simde    MPK4: open-mpk4 checkout
 # OSC440: pico-osc440 (default: the copy in ../third_party, built with OSC440_SST_FILTERS)
 # MI: pichenettes/eurorack checkout with stmlib cloned into it
@@ -23,10 +23,10 @@ OSRC="$O/dsp/buffer.cpp $O/dsp/interpolate.cpp $O/synth/saw_osc.cpp $O/synth/saw
       $O/synth/wavetable_osc.cpp $O/synth/wavetable_data.cpp $O/synth/wavetable_plaits.cpp $O/synth/oscillator.cpp
       $O/synth/dadsr.cpp $O/synth/mseg.cpp $O/synth/lfo.cpp $O/synth/triple_wave_group.cpp
       $O/engine/voice_allocator.cpp $O/engine/voice_engine.cpp"
-# -Iwave first: wave/config/audio_config.h runs osc440 at 44.1 kHz instead of 48 kHz
+# the engine is ../core (shared with the Pi kernel); -I. first: config/audio_config.h runs osc440 at 44.1 kHz instead of 48 kHz
 emcc -std=c++20 -O3 -msimd128 -msse4.1 -fno-exceptions -Wno-deprecated-enum-float-conversion \
-  -DTEST -DOSC440_SST_FILTERS -Iwave -I$O -I$E -Imods -I$L/sst-filters/include -I$L/sst-basic-blocks/include -I$L/simde \
-  wasm_api.cpp wave/wave_lane.cpp mods/mods.cpp ../src/sampler.cpp $O/synth/sst_filter.cpp $OSRC $MSRC -o filterlab.wasm \
+  -DTEST -DOSC440_SST_FILTERS -I. -I../core -I$O -I$E -I$L/sst-filters/include -I$L/sst-basic-blocks/include -I$L/simde \
+  platform.cpp ../core/engine.cpp ../core/wave_lane.cpp ../core/mods/mods.cpp ../core/sampler.cpp $O/synth/sst_filter.cpp $OSRC $MSRC -o filterlab.wasm \
   --no-entry -sSTANDALONE_WASM -sTOTAL_STACK=262144 -sINITIAL_MEMORY=50331648
 # the display: 150 x 112, shown at 4x on the 600 x 450 AMOLED (600 x 448). A copy of board.h and gfx.c with that size.
 mkdir -p screen/gen

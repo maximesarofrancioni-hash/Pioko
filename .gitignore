@@ -6,6 +6,7 @@ src/*.elf
 src/*.img
 src/*.map
 src/*.lst
+src/build/
 host/render
 *.wav
 web/filterlab.wasm

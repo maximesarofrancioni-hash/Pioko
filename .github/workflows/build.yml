@@ -10,14 +10,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch Circle and the sst libraries
+      - name: Fetch Circle, the sst libraries and Mutable Instruments' eurorack
         run: |
           git clone --depth 1 https://github.com/rsta2/circle.git circle
           mkdir -p libs
           git clone --depth 1 https://github.com/surge-synthesizer/sst-filters.git libs/sst-filters
           git clone --depth 1 https://github.com/surge-synthesizer/sst-basic-blocks.git libs/sst-basic-blocks
           git clone --depth 1 https://github.com/simd-everywhere/simde.git libs/simde
-          for d in circle libs/*; do echo "$d $(git -C $d rev-parse --short HEAD)"; done | tee versions.txt
+          git clone --depth 1 https://github.com/pichenettes/eurorack.git libs/eurorack
+          git clone --depth 1 https://github.com/pichenettes/stmlib.git libs/eurorack/stmlib
+          for d in circle libs/* libs/eurorack/stmlib; do echo "$d $(git -C $d rev-parse --short HEAD)"; done | tee versions.txt
 
       - name: Arm GNU toolchain (aarch64-none-elf)
         run: |
@@ -32,8 +34,14 @@ jobs:
           cd circle && ./makeall --nosample -j$(nproc) || ./makeall -j$(nproc)
           cd boot && make firmware && make armstub64
 
-      - name: Build filter-lab
-        run: make -C src -j$(nproc)
+      - name: Build Pyoko
+        run: |
+          make -C src -j$(nproc)
+          # Circle halts at boot if the image + BSS outgrow KERNEL_MAX_SIZE (circle-config/Config.mk: 32 MB)
+          aarch64-none-elf-size src/kernel8-rpi4.elf
+          END=$(aarch64-none-elf-nm src/kernel8-rpi4.elf | awk '$3=="_end"{print $1}')
+          echo "kernel ends at 0x$END (limit 0x80000 + 0x2000000)"
+          test $((0x$END)) -le $((0x80000 + 0x2000000))
 
       - name: Assemble SD card
         run: |

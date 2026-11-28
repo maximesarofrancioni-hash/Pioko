@@ -1,20 +1,28 @@
-// kernel.cpp - filter-lab main loop
+// kernel.cpp - Pyoko's main loop on the Pi 4
 //
-// Single core, no scheduler: the main loop renders 32-frame blocks into
-// Circle's sound write queue whenever there is room, and the I2S DMA
-// interrupt drains it. Rendering never runs in interrupt context, so the
-// filter code can use the FPU/NEON freely.
+// Single core, no scheduler: the main loop renders FL_BLOCK-frame blocks of the engine (core/) into Circle's sound
+// write queue whenever there is room, and the I2S DMA interrupt drains it. Rendering never runs in interrupt
+// context, so the DSP can use the FPU / NEON freely. It boots into the Lofi hip hop scene; the serial port (115200)
+// and two buttons play it. The page's SP-303 Vinyl Sim is JavaScript and does not run here yet.
 #include "kernel.h"
+#include "engine.h"
+#include "scenes.h"
 #include <circle/util.h>
 #include <circle/string.h>
 
 static const char FromKernel[] = "pyoko";
 
-// the sampler's RAM comes from the heap in Initialize() (Circle keeps the kernel image + BSS under 2 MB)
+// the sampler's memory, taken from the heap in Run() before the engine starts
+static float *s_pSampleRAM = nullptr;
+static int s_nSampleFrames = 0;
+extern "C" float *pyoko_sample_ram (int *pFrames) { *pFrames = s_nSampleFrames; return s_pSampleRAM; }
 
-static float Clamp (float x, float lo, float hi);
+static float Clamp (float x, float lo, float hi) { return x < lo ? lo : (x > hi ? hi : x); }
+static int ClampI (int x, int lo, int hi) { return x < lo ? lo : (x > hi ? hi : x); }
 
-static const char *kLaneName[] = {"bass", "lead", "stab", "noise", "accent"};
+static const char *const kSeqName[] = {"Euclid", "Marbles", "shift"};
+static const char *const kStyleName[] = {"chords", "arp", "bass"};
+static const char *const kProgName[] = {"Am F C G", "Fmaj9 Em9 Dm9 Cmaj9"};
 
 CKernel::CKernel (void)
 :	m_Timer (&m_Interrupt),
@@ -22,19 +30,19 @@ CKernel::CKernel (void)
 	m_Logger (m_Options.GetLogLevel (), &m_Timer),
 	m_Sound (&m_Interrupt, SAMPLE_RATE, CHUNK_SIZE, FALSE, 0, 0,
 		 CI2SSoundBaseDevice::DeviceModeTXOnly),
-#if PIN_NEXT_FILTER
-	m_NextPin (PIN_NEXT_FILTER, GPIOModeInputPullUp),
+#if PIN_NEXT_PRESET
+	m_NextPin (PIN_NEXT_PRESET, GPIOModeInputPullUp),
 #endif
-#if PIN_HOLD
-	m_HoldPin (PIN_HOLD, GPIOModeInputPullUp),
+#if PIN_PLAY
+	m_PlayPin (PIN_PLAY, GPIOModeInputPullUp),
 #endif
-	m_nEditLane (1),
-	m_nLastStep (-1),
+	m_bPlaying (TRUE),
+	m_nTrack (0),
 	m_nLastBar (-1),
 	m_nBusyTicks (0),
 	m_nLedOffAt (0),
-	m_nLastNext (HIGH), m_nLastHold (HIGH),
-	m_nNextDebounce (0), m_nHoldDebounce (0)
+	m_nLastNext (HIGH), m_nLastPlay (HIGH),
+	m_nNextDebounce (0), m_nPlayDebounce (0)
 {
 	m_ActLED.Blink (3);
 }
@@ -60,10 +68,9 @@ boolean CKernel::Initialize (void)
 
 TShutdownMode CKernel::Run (void)
 {
-	m_Logger.Write (FromKernel, LogNotice, "filter-lab, %u Hz, sst-filters through a Euclidean sequencer",
+	m_Logger.Write (FromKernel, LogNotice, "Pyoko, %u Hz: osc440 + sampler, sst-filters, Marbles, Tides, Beads",
 			SAMPLE_RATE);
 
-	m_Lab.Init ((float) SAMPLE_RATE);
 	{
 		unsigned nFrames = SAMPLER_FRAMES;
 		float *pRAM = nullptr;
@@ -80,12 +87,13 @@ TShutdownMode CKernel::Run (void)
 		{
 			memset (pRAM, 0, nFrames * sizeof (float));
 		}
-		m_Sampler.Init (pRAM, (int) nFrames, (float) SAMPLE_RATE);
+		s_pSampleRAM = pRAM;
+		s_nSampleFrames = (int) nFrames;
 		m_Logger.Write (FromKernel, LogNotice, "Sampler: %u MB of RAM, %u s at %u Hz",
 				nFrames * 4u >> 20, nFrames / SAMPLE_RATE, SAMPLE_RATE);
 	}
-	m_Sampler.MakeDemo ();
-	m_Lab.barsPerFilter = DEFAULT_BARS_PER_FILTER;
+	fl_init ((float) SAMPLE_RATE);
+	Lofi ();
 
 	if (!m_Sound.AllocateQueueFrames (QUEUE_FRAMES))
 	{
@@ -102,6 +110,7 @@ TShutdownMode CKernel::Run (void)
 	}
 	m_Logger.Write (FromKernel, LogNotice, "Audio running, queue %u frames", nQueue);
 	PrintHelp ();
+	PrintStatus ();
 
 	unsigned nLastStatus = CTimer::GetClockTicks ();
 	u64 nWindowStart = CTimer::GetClockTicks64 ();
@@ -109,7 +118,7 @@ TShutdownMode CKernel::Run (void)
 	while (m_Sound.IsActive ())
 	{
 		unsigned nFree = nQueue - m_Sound.GetQueueFramesAvail ();
-		if (nFree >= FilterLab::kBlock)
+		if (nFree >= FL_BLOCK)
 		{
 			FillQueue (nFree);
 		}
@@ -125,12 +134,11 @@ TShutdownMode CKernel::Run (void)
 		PollButtons ();
 		m_CPUThrottle.Update ();	// lowers the clock if the SoC gets too hot
 
-		if (m_Lab.filterChanged)
+		// the ACT LED flashes on every bar
+		int nBar = fl_bar ();
+		if (m_bPlaying && nBar != m_nLastBar)
 		{
-			m_Lab.filterChanged = false;
-			m_Logger.Write (FromKernel, LogNotice, "[%2d/%d] %s%s",
-					m_Lab.FilterIndex () + 1, m_Lab.NumFilters (),
-					m_Lab.FilterName (), m_Lab.barsPerFilter ? "" : "  (hold)");
+			m_nLastBar = nBar;
 			m_ActLED.On ();
 			m_nLedOffAt = CTimer::GetClockTicks () + 40000;
 		}
@@ -162,52 +170,91 @@ TShutdownMode CKernel::Run (void)
 
 void CKernel::FillQueue (unsigned nFrames)
 {
-	float L[FilterLab::kBlock], R[FilterLab::kBlock];
-	float Inter[FilterLab::kBlock * 2];
+	float Inter[FL_BLOCK * 2];
 
-	while (nFrames >= (unsigned) FilterLab::kBlock)
+	while (nFrames >= (unsigned) FL_BLOCK)
 	{
-		u64 t0 = CTimer::GetClockTicks64 ();
-		m_Lab.Render (L, R);
-
-		// the sampler on its own lane, clocked by the lab's 16ths; it can resample the lab
-		int nStep = m_Lab.Step (), nBar = m_Lab.Bar ();
-		if (nStep != m_nLastStep || nBar != m_nLastBar)
+		if (m_bPlaying)
 		{
-			m_nLastStep = nStep; m_nLastBar = nBar;
-			double fSp16 = SAMPLE_RATE * 60.0 / m_Lab.bpm / 4.0;
-			m_Sampler.Tick ((nStep + 15) % 16, nBar, fSp16);
+			u64 t0 = CTimer::GetClockTicks64 ();
+			fl_render ();
+			m_nBusyTicks += CTimer::GetClockTicks64 () - t0;
+			const float *L = fl_left (), *R = fl_right ();
+			for (int i = 0; i < FL_BLOCK; i++)
+			{
+				Inter[2 * i] = L[i];
+				Inter[2 * i + 1] = R[i];
+			}
 		}
-		m_Sampler.Capture (L, R, FilterLab::kBlock);
-		m_Sampler.Render (L, R, FilterLab::kBlock);
-		for (int i = 0; i < FilterLab::kBlock; i++)
+		else
 		{
-			L[i] = Clamp (L[i], -1.f, 1.f);
-			R[i] = Clamp (R[i], -1.f, 1.f);
-		}
-		if (m_Sampler.TakeRecorded ())
-		{
-			m_Logger.Write (FromKernel, LogNotice, "Resampled %u frames", (unsigned) m_Sampler.Length ());
-		}
-		m_nBusyTicks += CTimer::GetClockTicks64 () - t0;
-
-		for (int i = 0; i < FilterLab::kBlock; i++)
-		{
-			Inter[2 * i] = L[i];
-			Inter[2 * i + 1] = R[i];
+			memset (Inter, 0, sizeof Inter);	// paused: the clock stops with the sound
 		}
 		if (m_Sound.Write (Inter, sizeof Inter) != (int) sizeof Inter)
 		{
 			m_Logger.Write (FromKernel, LogWarning, "Queue overflow");
 		}
-		nFrames -= FilterLab::kBlock;
+		nFrames -= FL_BLOCK;
+	}
+}
+
+// ---------------------------------------------------------------- what the keys change, sent to the engine
+
+void CKernel::Lofi (void)
+{
+	pyoko_scene_lofi ();
+	// the scene's settings (core/scenes.cpp), as the keys start from
+	m_fBpm = 78.f; m_nSwing = 62;
+	m_nPreset = pyoko_preset_find ("bedroom_pop", "e-piano");
+	m_nProg = 1; m_nStyle = 0; m_nOctave = 0;
+	m_Track[0] = {0, 16, 3, 0, {17, 4}, {100.f, 86.f}, {0.1f, 0.12f}, FALSE};
+	m_Track[1] = {0, 16, 16, 0, {17, 4}, {135.f, 135.f}, {0.f, 0.f}, FALSE};
+	m_fSmpPitch = -3.f; m_bSmpOn = TRUE; m_bBeads = FALSE;
+}
+
+void CKernel::SendSeq (int nTrack)
+{
+	const TTrack &T = m_Track[nTrack];
+	if (nTrack == 0)
+		fl_wave_cfg (0, (float) (T.nSeq == 0 ? m_nStyle : T.nSeq == 1 ? 4 : 3));	// the engine's wave modes
+	else
+		fl_smp_set (20, (float) T.nSeq);
+}
+
+void CKernel::SendPattern (int nTrack)
+{
+	const TTrack &T = m_Track[nTrack];
+	if (nTrack == 0)
+		fl_wave_euclid (T.nSteps, T.nHits, T.nRot);
+	else
+	{
+		fl_smp_set (11, (float) T.nSteps); fl_smp_set (12, (float) T.nHits); fl_smp_set (13, (float) T.nRot);
+	}
+}
+
+void CKernel::SendFilters (int nTrack)
+{
+	const TTrack &T = m_Track[nTrack];
+	if (nTrack == 0)
+	{
+		fl_wave_set (20, (float) T.nModel[0]); fl_wave_set (21, (float) T.nModel[1]);
+		fl_wave_set (2, T.fCut[0]); fl_wave_set (7, T.fCut[1]);
+		fl_wave_set (3, T.fRes[0]); fl_wave_set (8, T.fRes[1]);
+		fl_wave_set (12, T.bParallel ? 1.f : 0.f);
+	}
+	else
+	{
+		fl_smp_set (21, (float) T.nModel[0]); fl_smp_set (22, (float) T.nModel[1]);
+		fl_smp_set (23, T.fCut[0]); fl_smp_set (24, T.fCut[1]);
+		fl_smp_set (25, T.fRes[0]); fl_smp_set (26, T.fRes[1]);
+		fl_smp_set (27, T.bParallel ? 1.f : 0.f);
 	}
 }
 
 void CKernel::PollButtons (void)
 {
 	unsigned nNow = CTimer::GetClockTicks ();
-#if PIN_NEXT_FILTER
+#if PIN_NEXT_PRESET
 	unsigned v = m_NextPin.Read ();
 	if (v != m_nLastNext && (int) (nNow - m_nNextDebounce) > 0)
 	{
@@ -215,99 +262,81 @@ void CKernel::PollButtons (void)
 		m_nNextDebounce = nNow + 30000;		// 30 ms
 		if (v == LOW)
 		{
-			m_Lab.NextFilter ();
+			HandleKey ('n');
 		}
 	}
 #endif
-#if PIN_HOLD
-	unsigned h = m_HoldPin.Read ();
-	if (h != m_nLastHold && (int) (nNow - m_nHoldDebounce) > 0)
+#if PIN_PLAY
+	unsigned h = m_PlayPin.Read ();
+	if (h != m_nLastPlay && (int) (nNow - m_nPlayDebounce) > 0)
 	{
-		m_nLastHold = h;
-		m_nHoldDebounce = nNow + 30000;
+		m_nLastPlay = h;
+		m_nPlayDebounce = nNow + 30000;
 		if (h == LOW)
 		{
-			HandleKey ('h');
+			HandleKey (' ');
 		}
 	}
 #endif
-}
-
-static float Clamp (float x, float lo, float hi)
-{
-	return x < lo ? lo : (x > hi ? hi : x);
 }
 
 void CKernel::HandleKey (char c)
 {
-	FilterLab &F = m_Lab;
-	int nSteps, nHits, nRot;
-	F.GetEuclid (m_nEditLane, nSteps, nHits, nRot);
+	TTrack &T = m_Track[m_nTrack];
+	const int nModels = fl_num_filters ();
 
 	switch (c)
 	{
-	case 'n': F.NextFilter (); return;
-	case 'p': F.PrevFilter (); return;
-	case 'h':
-		F.barsPerFilter = F.barsPerFilter ? 0 : DEFAULT_BARS_PER_FILTER;
-		m_Logger.Write (FromKernel, LogNotice, F.barsPerFilter ? "Auto-advance every %d bars" : "Hold",
-				F.barsPerFilter);
-		return;
-
-	case 'r': F.resonance = Clamp (F.resonance - 0.05f, 0.f, 0.99f); break;
-	case 'R': F.resonance = Clamp (F.resonance + 0.05f, 0.f, 0.99f); break;
-	case 'c': F.cutoffOffset = Clamp (F.cutoffOffset - 3.f, -48.f, 48.f); break;
-	case 'C': F.cutoffOffset = Clamp (F.cutoffOffset + 3.f, -48.f, 48.f); break;
-	case 'e': F.envAmount = Clamp (F.envAmount - 0.1f, 0.f, 2.f); break;
-	case 'E': F.envAmount = Clamp (F.envAmount + 0.1f, 0.f, 2.f); break;
-	case 'd': F.drive = Clamp (F.drive * 0.8f, 0.1f, 8.f); break;
-	case 'D': F.drive = Clamp (F.drive * 1.25f, 0.1f, 8.f); break;
-	case 's': F.sweep = !F.sweep; break;
-	case 't': F.bpm = Clamp (F.bpm - 5.f, 40.f, 240.f); break;
-	case 'T': F.bpm = Clamp (F.bpm + 5.f, 40.f, 240.f); break;
-
-	case '1': case '2': case '3': case '4':
-		F.mute[c - '1'] = !F.mute[c - '1'];
+	case ' ': m_bPlaying = !m_bPlaying; m_Logger.Write (FromKernel, LogNotice, m_bPlaying ? "Play" : "Pause"); return;
+	case 'L': Lofi (); break;
+	case 't': m_fBpm = Clamp (m_fBpm - 2.f, 40.f, 240.f); fl_set (4, m_fBpm); break;
+	case 'T': m_fBpm = Clamp (m_fBpm + 2.f, 40.f, 240.f); fl_set (4, m_fBpm); break;
+	case 's': case 'S':
+		m_nSwing = ClampI (m_nSwing + (c == 'S' ? 2 : -2), 50, 70);
+		fl_set (7, (float) (m_nSwing - 50) / 50.f);
 		break;
+	case '1': case '2': m_nTrack = c - '1'; break;
 
-	case 'l':
-		m_nEditLane = (m_nEditLane + 1) % (FilterLab::kLanes + 1);
-		F.GetEuclid (m_nEditLane, nSteps, nHits, nRot);
-		m_Logger.Write (FromKernel, LogNotice, "Editing %s: E(%d,%d) rot %d",
-				kLaneName[m_nEditLane], nHits, nSteps, nRot);
-		return;
+	// the edited track: its sequencer, Euclidean pattern and VCF
+	case 'q': T.nSeq = (T.nSeq + 1) % 3; SendSeq (m_nTrack); break;
 	case 'z': case 'x': case ',': case '.': case 'v': case 'b':
-		if (c == 'z') nHits--;
-		if (c == 'x') nHits++;
-		if (c == ',') nSteps--;
-		if (c == '.') nSteps++;
-		if (c == 'v') nRot--;
-		if (c == 'b') nRot++;
-		F.SetEuclid (m_nEditLane, nSteps, nHits, nRot);
-		F.GetEuclid (m_nEditLane, nSteps, nHits, nRot);
-		m_Logger.Write (FromKernel, LogNotice, "%s: E(%d,%d) rot %d",
-				kLaneName[m_nEditLane], nHits, nSteps, nRot);
-		return;
-
-	// sampler
-	case 'm': m_Sampler.on = !m_Sampler.on; break;
-	case 'k': m_Sampler.MakeDemo (); break;
-	case 'w': m_Sampler.Arm (2); m_Logger.Write (FromKernel, LogNotice, "Resample armed: 2 bars from the next downbeat"); return;
-	case 'g':					// 4, 8, 16, auto
-		if (m_Sampler.autoSlice) { m_Sampler.autoSlice = false; m_Sampler.slices = 4; }
-		else if (m_Sampler.slices == 16) m_Sampler.autoSlice = true;
-		else m_Sampler.slices *= 2;
-		m_Sampler.Update ();
+		if (c == 'z') T.nHits--;
+		if (c == 'x') T.nHits++;
+		if (c == ',') T.nSteps--;
+		if (c == '.') T.nSteps++;
+		if (c == 'v') T.nRot--;
+		if (c == 'b') T.nRot++;
+		T.nSteps = ClampI (T.nSteps, 1, 16);
+		T.nHits = ClampI (T.nHits, 0, T.nSteps);
+		T.nRot = (T.nRot % T.nSteps + T.nSteps) % T.nSteps;
+		SendPattern (m_nTrack);
 		break;
-	case 'y': m_Sampler.sens = Clamp (m_Sampler.sens - 0.1f, 0.f, 1.f); m_Sampler.Update (); break;
-	case 'Y': m_Sampler.sens = Clamp (m_Sampler.sens + 0.1f, 0.f, 1.f); m_Sampler.Update (); break;
-	case 'q': m_Sampler.pitchMode ^= 1; break;
-	case 'o': m_Sampler.order ^= 1; break;
-	case 'O': m_Sampler.mode ^= 1; break;
-	case 'j': m_Sampler.pitch = Clamp (m_Sampler.pitch - 1.f, -24.f, 24.f); break;
-	case 'J': m_Sampler.pitch = Clamp (m_Sampler.pitch + 1.f, -24.f, 24.f); break;
-	case 'a': m_Sampler.hits = m_Sampler.hits > 0 ? m_Sampler.hits - 1 : 0; break;
-	case 'A': m_Sampler.hits = m_Sampler.hits < m_Sampler.steps ? m_Sampler.hits + 1 : m_Sampler.steps; break;
+	case '[': case ']': T.nModel[0] = (T.nModel[0] + (c == ']' ? 1 : nModels - 1)) % nModels; SendFilters (m_nTrack); break;
+	case '{': case '}': T.nModel[1] = (T.nModel[1] + (c == '}' ? 1 : nModels - 1)) % nModels; SendFilters (m_nTrack); break;
+	case 'f': case 'F': T.fCut[0] = Clamp (T.fCut[0] + (c == 'F' ? 3.f : -3.f), 20.f, 135.f); SendFilters (m_nTrack); break;
+	case 'g': case 'G': T.fCut[1] = Clamp (T.fCut[1] + (c == 'G' ? 3.f : -3.f), 20.f, 135.f); SendFilters (m_nTrack); break;
+	case 'e': case 'E': T.fRes[0] = Clamp (T.fRes[0] + (c == 'E' ? 0.05f : -0.05f), 0.f, 1.f); SendFilters (m_nTrack); break;
+	case 'r': case 'R': T.fRes[1] = Clamp (T.fRes[1] + (c == 'R' ? 0.05f : -0.05f), 0.f, 1.f); SendFilters (m_nTrack); break;
+	case 'p': T.bParallel = !T.bParallel; SendFilters (m_nTrack); break;
+
+	// track 1, osc440
+	case 'n': case 'N':
+		m_nPreset = (m_nPreset + (c == 'n' ? 1 : pyoko_preset_count () - 1)) % pyoko_preset_count ();
+		pyoko_load_preset (m_nPreset);
+		SendFilters (0);		// the preset resets the voice; keep its VCF as set here
+		break;
+	case 'c': m_nProg ^= 1; fl_wave_cfg (5, (float) m_nProg); break;
+	case 'y': m_nStyle = (m_nStyle + 1) % 3; SendSeq (0); break;
+	case 'o': case 'O': m_nOctave = ClampI (m_nOctave + (c == 'O' ? 1 : -1), -2, 2); fl_wave_cfg (1, (float) m_nOctave); break;
+
+	// track 2, the sampler
+	case 'k': fl_smp_demo (); break;
+	case 'w': fl_smp_arm (2); m_Logger.Write (FromKernel, LogNotice, "Resample armed: 2 bars from the next downbeat"); return;
+	case 'j': case 'J': m_fSmpPitch = Clamp (m_fSmpPitch + (c == 'J' ? 1.f : -1.f), -24.f, 24.f); fl_smp_set (2, m_fSmpPitch); break;
+	case 'm': m_bSmpOn = !m_bSmpOn; fl_smp_set (10, m_bSmpOn ? 1.f : 0.f); break;
+
+	// FX
+	case 'B': m_bBeads = !m_bBeads; fl_mod_set (3, 0, m_bBeads ? 1.f : 0.f); break;
 
 	case '?': PrintHelp (); return;
 	case 'i': break;
@@ -318,31 +347,33 @@ void CKernel::HandleKey (char c)
 
 void CKernel::PrintStatus (void)
 {
-	FilterLab &F = m_Lab;
-	CString Mutes;
-	for (int i = 0; i < FilterLab::kLanes; i++)
+	m_Logger.Write (FromKernel, LogNotice, "%s %.0f BPM, swing %d%% | editing track %d | Beads %s",
+			m_bPlaying ? "playing" : "paused", (double) m_fBpm, m_nSwing, m_nTrack + 1, m_bBeads ? "on" : "off");
+	for (int t = 0; t < 2; t++)
 	{
-		Mutes.Append (F.mute[i] ? "-" : kLaneName[i]);
-		Mutes.Append (" ");
+		const TTrack &T = m_Track[t];
+		CString Src;
+		if (t == 0)
+			Src.Format ("osc440 %s / %s, %s, %s, oct %d", pyoko_preset_group (m_nPreset), pyoko_preset_name (m_nPreset),
+				    kProgName[m_nProg], kStyleName[m_nStyle], m_nOctave);
+		else
+			Src.Format ("sampler %s, pitch %.0f st", m_bSmpOn ? "on" : "muted", (double) m_fSmpPitch);
+		m_Logger.Write (FromKernel, LogNotice, "%c %d: %s | %s E(%d,%d)+%d", t == m_nTrack ? '>' : ' ', t + 1,
+				(const char *) Src, kSeqName[T.nSeq], T.nHits, T.nSteps, T.nRot);
+		m_Logger.Write (FromKernel, LogNotice, "     VCF %s: 1 %s %.0f res %.2f, 2 %s %.0f res %.2f",
+				T.bParallel ? "parallel" : "series", fl_filter_name (T.nModel[0]), (double) T.fCut[0], (double) T.fRes[0],
+				fl_filter_name (T.nModel[1]), (double) T.fCut[1], (double) T.fRes[1]);
 	}
-	m_Logger.Write (FromKernel, LogNotice,
-			"[%d] %s | res %.2f cut %.0f env %.1f drive %.2f sweep %s bpm %.0f | %s",
-			F.FilterIndex () + 1, F.FilterName (), (double) F.resonance,
-			(double) F.cutoffOffset, (double) F.envAmount, (double) F.drive,
-			F.sweep ? "on" : "off", (double) F.bpm, (const char *) Mutes);
-	m_Logger.Write (FromKernel, LogNotice, "sampler %s | %s %d%s | pitch %+.0f %s | E(%d,%d) | %u frames",
-			m_Sampler.on ? "on" : "muted", m_Sampler.mode ? (m_Sampler.autoSlice ? "auto" : "slice") : "one shot",
-			m_Sampler.NumSlices (), m_Sampler.order ? " rnd" : "", (double) m_Sampler.pitch,
-			m_Sampler.pitchMode ? "keep" : "vari", m_Sampler.hits, m_Sampler.steps,
-			(unsigned) m_Sampler.Length ());
 }
 
 void CKernel::PrintHelp (void)
 {
 	m_Logger.Write (FromKernel, LogNotice,
-		"Keys: n/p next/prev filter, h hold, r/R reso, c/C cutoff, e/E env, d/D drive, "
-		"s sweep, t/T tempo, 1-4 mute lanes, l pick lane, z/x hits, ,/. steps, v/b rotate, i status");
+		"Keys: space play/pause, L lofi scene, t/T tempo, s/S swing, 1/2 edit track, i status, ? help");
 	m_Logger.Write (FromKernel, LogNotice,
-		"Sampler: m mute, k demo break, w resample 2 bars, g slices 4/8/16/auto, y/Y auto sens, o random order, "
-		"O one shot/slice, j/J pitch, q varispeed/keep time, a/A hits");
+		"Track: q sequencer (Euclid/Marbles/shift), z/x hits, ,/. steps, v/b rotate, [ ] filter 1 model, { } filter 2 model, "
+		"f/F g/G cutoffs, e/E r/R resonances, p series/parallel");
+	m_Logger.Write (FromKernel, LogNotice,
+		"Osc: n/N preset, c chords, y chords/arp/bass, o/O octave | Sampler: k demo break, w resample 2 bars, j/J pitch, "
+		"m mute | B Beads on/off");
 }
