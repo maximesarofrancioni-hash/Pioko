@@ -151,7 +151,9 @@ the sampler, the shift register, Mutable Instruments Marbles, Tides 2 and Beads,
 
 Pages (Elektron-style keys): FILTER | SHIFT (Turing Machine-style register), MARBLES | PLAY, OSC, ENV (osc440) |
 SAMPLER | TIDES (Tides 2, 4 outputs routed to osc440's oscillators and filters or Beads), MATRIX | BEADS, VINYL.
-Tempo is in the header.
+Tempo and swing are in the header. The PLAY page's **Lofi hip hop** button sets up a whole sequence: 78 BPM,
+62% swing, the e-piano on Fmaj9 Em9 Dm9 Cmaj9 through warm low passes, the demo break slowed by varispeed, the
+Vinyl Sim's noise and wow.
 
 The display is 150 x 112, shown at 4x on a 600 x 450 AMOLED. Its footer has two parameter lines: line 1 is what
 the four front panel encoders turn on the current page, line 2 the four encoders under the screen (the page maps eight

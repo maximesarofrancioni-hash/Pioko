@@ -63,7 +63,8 @@ static struct {
     char mx_txt[10][16]; int mx_amt[10], mx_n, mx_focus;         /* MATRIX: up to 10 rows, amount -1000..1000 */
     /* ENV: per envelope attack/decay/release ms, sustain %, live level 0..1000 */
     int e_a[3], e_d[3], e_s[3], e_r[3], e_lv[3], e_amt_lad, e_amt_svf, e_gate10, e_ppg[3];
-    char e_sub[40];                  /* ENV subtitle: where env 3 goes */
+    char e_sub[40];
+    char chords[32];                 /* PLAY: the progression's 4 chord names, 'AM|F|C|G' */                  /* ENV subtitle: where env 3 goes */
     int e_focus;                     /* 0 env 1 (filters), 1 env 2 (amp), 2 env 3 */
     /* LFO 1: one cycle of its shape (-64..63), phase 0..1000 (-1: no voice), rate x100, delay ms */
     int8_t l_pts[128]; int l_ph, l_rate, l_dly; char l_shape[12];
@@ -425,21 +426,26 @@ static void scr_wflt(void)
 /* ---------------------------------------------------------------- PLAY: the wave lane - preset, chords, pattern */
 static void scr_play(uint32_t now)
 {
-    static const char *const CH[4] = { "AM", "F", "C", "G" };
     static const char *const MODE[5] = { "CHORD", "ARP", "BASS", "SHIFT", "MARBLES" };
     char b[40];
     snprintf(b, sizeof b, "%s  %s  OCT %+d", M.p_group, MODE[M.p_mode % 5], M.p_oct);
     mod_head_text(M.w_name, b);
-    /* chord pads, like the lane pads on HOME: the bar's chord framed, lit while notes sound */
-    int cur = M.bar & 3;
+    /* chord pads: the bar's chord framed, lit while notes sound; the names come from the page */
+    char ch[4][8] = {{0}};
+    for (int i = 0, k = 0, j = 0; M.chords[k] && i < 4; k++) {
+        if (M.chords[k] == '|') { i++; j = 0; continue; }
+        if (j < 7) ch[i][j++] = M.chords[k];
+    }
+    int cur = M.bar & 3, sc = 2;   /* one size for all four: 2x if every name fits a pad */
+    for (int i = 0; i < 4; i++) if (gfx_text_w(ch[i], 2) > 31) sc = 1;
     for (int i = 0; i < 4; i++) {
         int x = i * 37 + 1, w = 35, y = 34, h = 24;
         bool now_ = M.playing && i == cur, lit = now_ && M.w_held > 0 && M.p_on;
         if (lit) { gfx_rect(x, y, w, h, T->surf); gfx_dither(x, y, w, h, T->line); gfx_frame(x, y, w, h, T->accent); }
         else gfx_frame(x, y, w, h, now_ ? T->dim : T->line);
-        gfx_text(CH[i], x + w / 2 - (gfx_text_w(CH[i], 2) >> 1), y + h / 2 - 4, lit ? T->accent : now_ ? T->ink : T->dim, 2);
+        gfx_text(ch[i], x + w / 2 - (gfx_text_w(ch[i], sc) >> 1), y + h / 2 - (sc == 2 ? 4 : 2), lit ? T->accent : now_ ? T->ink : T->dim, sc);
     }
-    /* the lane's Euclid pattern, cells as on EUCLID, playhead in the accent */
+    /* the lane's Euclid pattern, playhead in the accent */
     gfx_text("WV", 2, 70, M.p_on ? T->dim : T->line, 1);
     if (!M.p_on) gfx_text("M", 12, 70, T->warn, 1);
     for (int s = 0; s < 16; s++) {
@@ -807,6 +813,7 @@ API void scr_init(void)
     memset(&M, 0, sizeof M);
     M.theme_drawn = -1; M.bpm = 120; M.nfilt = 1; M.bars_per = 4; M.sweep = 1; M.res = 65; M.env = 100;
     M.fc = 440; M.boot_on = 1; M.sel = 1; M.v_on = 1; M.v_comp = 64; M.p_on = 1; M.p_steps = 16; M.e_focus = 1;
+    strcpy(M.chords, "AM|F|C|G");
     strcpy(M.fam, "PYOKO");
 }
 API uint16_t *scr_fb(void) { return fb; }
@@ -865,8 +872,8 @@ API const char *scr_theme_name(int i) { return THEMES[(unsigned)i % N_THEMES]->n
 API void scr_str(int which)
 {
     char *d = which == 0 ? M.fam : which == 1 ? M.var : which == 2 ? M.kname : which == 3 ? M.kval : which == 4 ? M.kunit
-            : which == 5 ? M.w_name : which == 6 ? M.w_mode : which == 8 ? M.l_shape : which == 9 ? M.p_group : which == 10 ? M.e_sub : M.w_info;
-    size_t n = which <= 1 ? sizeof M.fam : which == 4 ? sizeof M.kunit : which == 8 ? sizeof M.l_shape : which == 9 ? sizeof M.p_group : which == 10 ? sizeof M.e_sub : which >= 5 ? sizeof M.w_name : sizeof M.kname;
+            : which == 5 ? M.w_name : which == 6 ? M.w_mode : which == 8 ? M.l_shape : which == 9 ? M.p_group : which == 10 ? M.e_sub : which == 11 ? M.chords : M.w_info;
+    size_t n = which <= 1 ? sizeof M.fam : which == 4 ? sizeof M.kunit : which == 8 ? sizeof M.l_shape : which == 9 ? sizeof M.p_group : which == 10 ? sizeof M.e_sub : which == 11 ? sizeof M.chords : which >= 5 ? sizeof M.w_name : sizeof M.kname;
     strncpy(d, sbuf, n - 1); d[n - 1] = 0;
 }
 

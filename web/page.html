@@ -157,6 +157,7 @@ dialog#settings h3{margin:14px 0 4px;font:700 15px/1 "Barlow Condensed",sans-ser
   <h1>Pyoko <span lang="ja">ぴょこ</span><small>sst-filters · osc440 · sampler · Marbles · Tides · Beads · SP-303 Vinyl Sim</small></h1>
   <button id="play" aria-pressed="false"><i></i><span>Play</span></button>
   <div class="stepw"><span class="legend">Tempo</span><div class="step"><button data-tempo="-1" aria-label="Tempo down">−</button><span id="tempo">120 BPM</span><button data-tempo="1" aria-label="Tempo up">+</button></div></div>
+  <div class="stepw"><span class="legend">Swing</span><div class="step"><button data-swing="-2" aria-label="Swing down">−</button><span id="swing">50%</span><button data-swing="2" aria-label="Swing up">+</button></div></div>
   <span class="sp"></span><button id="setb" aria-haspopup="dialog">Settings</button>
  </header>
  <dialog id="settings" aria-labelledby="set-h">
@@ -202,9 +203,11 @@ dialog#settings h3{margin:14px 0 4px;font:700 15px/1 "Barlow Condensed",sans-ser
    <button id="wprev" aria-label="Previous preset">◀</button>
    <select id="wpre" aria-label="osc440 preset"></select>
    <button id="wnext" aria-label="Next preset">▶</button>
+   <button id="lofi">Lofi hip hop</button>
   </div>
   <div class="vrow">
    <button id="wmute" aria-pressed="true">Wave lane on</button>
+   <span class="legend">Chords</span><span class="seg" id="wprog"><button data-v="0" class="on">Am F C G</button><button data-v="1">Fmaj9 Em9 Dm9 Cmaj9</button></span>
    <span class="seg" id="wmode"><button data-m="0" class="on">Chord</button><button data-m="1">Arp</button><button data-m="2">Bass</button><button data-m="3">Shift</button><button data-m="4">Marbles</button></span>
    <div class="stepw"><span class="legend">Octave</span><div class="step"><button data-w="oct" data-d="-1" aria-label="Octave down">−</button><span id="woct">0</span><button data-w="oct" data-d="1" aria-label="Octave up">+</button></div></div>
    <div class="stepw"><span class="legend">Hits</span><div class="step"><button data-w="hits" data-d="-1" aria-label="Hits down">−</button><span id="whits">5</span><button data-w="hits" data-d="1" aria-label="Hits up">+</button></div></div>
@@ -576,11 +579,11 @@ const WP=JSON.parse($('wpresets').textContent);
 const WDEF=new Float64Array(600);WP.defaults.forEach(([id,v])=>WDEF[id]=v);
 const wv=new Float64Array(WDEF);          // the sound as the engine has it
 let wOsc=0,wPre=0,wHeld=0,wChord=0,wPtsT=0;
-const wl={on:true,mode:0,oct:0,steps:16,hits:5,rot:2};
+const wl={on:true,mode:0,oct:0,steps:16,hits:5,rot:2,prog:0};
 const OMODES=['Wavetable','Sine','Triangle','Saw','Pulse','Supersaw','Noise','Colored noise'];
 const OSHORT=['WT','SINE','TRI','SAW','PULSE','SUPERSAW','NOISE','C NOISE'];
 const LSHAPE=['SINE','TRI','SAW','SAW DN','SQUARE','PULSE','S&H','SMOOTH','EXP','STEPS'];
-const CHORDS=['AM','F','C','G'],PMODE=['CHORD','ARP','BASS','SHIFT','MARBLES'];
+const CHORDS=[['AM','F','C','G'],['FMAJ9','EM9','DM9','CMAJ9']],PMODE=['CHORD','ARP','BASS','SHIFT','MARBLES'];
 const sec=(s)=>s<.1?(s*1000).toPrecision(2)+' ms':s<1?Math.round(s*1000)+' ms':s.toFixed(2)+' s';
 const pct=v=>Math.round(v*100)+'%',sgn=(v,u='')=>(v>0?'+':'')+v+u;
 // knob: id (absolute) or of (oscillator field), range, format
@@ -639,6 +642,8 @@ $('wprev').addEventListener('click',()=>loadPreset(wPre-1,true));$('wnext').addE
 function setWMode(m){wl.mode=m;$('wmode').querySelectorAll('button').forEach(x=>x.classList.toggle('on',+x.dataset.m===m));
  document.querySelectorAll('.usewave').forEach(x=>{const on=+x.dataset.m===m;x.classList.toggle('on',on);x.setAttribute('aria-pressed',on)});send({t:'wcfg',k:0,v:m});scrWave()}
 $('wmode').addEventListener('click',e=>{const b=e.target.closest('button');if(b)setWMode(+b.dataset.m)});
+function setProg(v){wl.prog=v;segOn('wprog',v);send({t:'wcfg',k:5,v});scrWave()}
+$('wprog').addEventListener('click',e=>{const b=e.target.closest('button');if(b)setProg(+b.dataset.v)});
 $('wmute').addEventListener('click',()=>{wl.on=!wl.on;$('wmute').textContent='Wave lane '+(wl.on?'on':'off');$('wmute').setAttribute('aria-pressed',wl.on);send({t:'wcfg',k:4,v:wl.on?0:1});scrWave()});
 function wPat(){const L={steps:wl.steps,hits:wl.hits,rot:wl.rot};$('wpat').innerHTML=Array.from({length:16},(_,s)=>`<i class="${hit(L,s)?'h':''}${s===stepNow?' cur':''}"></i>`).join('');
  $('woct').textContent=sgn(wl.oct);$('whits').textContent=wl.hits;$('wsteps').textContent=wl.steps;$('wrot').textContent=wl.rot}
@@ -648,10 +653,10 @@ $('s-play').addEventListener('click',e=>{const b=e.target.closest('button[data-w
   wl.hits=Math.min(wl.hits,wl.steps);send({t:'weuc',n:wl.steps,k:wl.hits,r:wl.rot})}
  wPat();scrWave()});
 function sendWaveAll(){send({t:'wwatch',o:wOsc});const p=WP.presets[wPre];const diff=[];for(const [id] of WP.defaults)if(wv[id]!==WDEF[id])diff.push([id,wv[id]]);
- send({t:'wpre',p:diff});send({t:'wcfg',k:0,v:wl.mode});send({t:'wcfg',k:1,v:wl.oct});send({t:'wcfg',k:4,v:wl.on?0:1});
+ send({t:'wpre',p:diff});send({t:'wcfg',k:0,v:wl.mode});send({t:'wcfg',k:1,v:wl.oct});send({t:'wcfg',k:4,v:wl.on?0:1});send({t:'wcfg',k:5,v:wl.prog});
  WK.voc.forEach(k=>{if(k.cfg!==undefined)send({t:'wcfg',k:k.cfg,v:k.v})});send({t:'weuc',n:wl.steps,k:wl.hits,r:wl.rot});reqPts()}
 // display
-function waveTick(h,c){wHeld=h||0;wChord=c||0;if(sc){sc.set(SS.w_held,wHeld);sc.str(7,(CHORDS[wChord]+' '+PMODE[wl.mode]).slice(0,13))}}
+function waveTick(h,c){wHeld=h||0;wChord=c||0;if(sc){sc.set(SS.w_held,wHeld);sc.str(7,(CHORDS[wl.prog][wChord]+' '+PMODE[wl.mode]).slice(0,13))}}
 function reqPts(){const b=100+wOsc*16;if(wv[b]===0){clearTimeout(wPtsT);wPtsT=setTimeout(()=>send({t:'wpts',table:wv[b+1],pos:wv[b+5]}),30)}else wavePts(null)}
 function waveLive(d){if(!sc)return;
  if(scrN===5){sc.e.scr_env_live(0,Math.round(d.e1*1000));sc.e.scr_env_live(1,Math.round(d.e2*1000));sc.e.scr_env_live(2,Math.round((d.e3||0)*1000))}
@@ -774,7 +779,7 @@ function scrWaveExtra(){if(!sc)return;
  respWave();sc.set(SS.f_res,Math.round(wv[8]*100));sc.set(SS.f_drv,Math.round(wv[9]*10));sc.set(SS.f_par,wv[12]>.5?1:0)}
 function scrWave(k){if(!sc)return;const b=100+wOsc*16,p=WP.presets[wPre];
  sc.str(5,p.name.toUpperCase().slice(0,20));sc.str(6,wv[b]===0?'WT '+(wv[b+1]?'PLAITS A':'BASIC'):OSHORT[wv[b]]||'');
- sc.str(7,(CHORDS[wChord]+' '+PMODE[wl.mode]).slice(0,13));
+ sc.str(7,(CHORDS[wl.prog][wChord]+' '+PMODE[wl.mode]).slice(0,13));sc.str(11,CHORDS[wl.prog].join('|'));
  sc.set(SS.w_osc,wOsc);sc.set(SS.w_pos,Math.round(wv[b+5]*10));sc.set(SS.w_lvl,Math.round(wv[b+4]*100));sc.set(SS.w_cut,Math.round(wv[7]));sc.set(SS.w_res,Math.round(wv[8]*100));sc.set(SS.w_wt,wv[b]===0?1:0);sc.set(SS.w_held,wHeld);
  if(k){const name=(k.of!==undefined?'OSC'+(wOsc+1)+' ':'')+k.l.toUpperCase();const t=k.f(k.v).toUpperCase();const m=t.match(/^([+\-]?[\d.]+)\s*(.*)$/);
   sc.str(2,name.slice(0,15));sc.str(3,(m?m[1]:t).slice(0,10));sc.str(4,(m?m[2]:'').slice(0,7));0}
@@ -932,6 +937,32 @@ document.addEventListener('keydown',e=>{if($('settings').open||e.target.tagName=
 // tempo (the engine's 16th-note clock)
 function setTempo(v){bpm=Math.max(40,Math.min(240,Math.round(v)));$('tempo').textContent=bpm+' BPM';send({t:'set',id:4,v:bpm});sc&&sc.set(SS.bpm,bpm)}
 document.querySelectorAll('[data-tempo]').forEach(b=>b.addEventListener('click',()=>setTempo(bpm+ +b.dataset.tempo)));
+// swing as the share of a pair of 16ths the first one takes: 50% straight, 66% triplet
+let swing=50;
+function setSwing(v){swing=Math.max(50,Math.min(70,Math.round(v)));$('swing').textContent=swing+'%';send({t:'set',id:7,v:(swing-50)/50})}
+document.querySelectorAll('[data-swing]').forEach(b=>b.addEventListener('click',()=>setSwing(swing+ +b.dataset.swing)));
+
+// one click to a lofi hip hop sequence: slow and swung, the e-piano on rootless 9th chords through warm low passes,
+// the demo break slowed by varispeed, the Vinyl Sim's noise and wow, Beads out of the way
+function lofiScene(){
+ setTempo(78);setSwing(62);
+ loadPreset(WP.presets.findIndex(p=>p.group==='bedroom_pop'&&p.name==='e-piano'));
+ setWMode(0);setProg(1);if(!wl.on)$('wmute').click();
+ wl.oct=0;wl.steps=16;wl.hits=3;wl.rot=0;send({t:'wcfg',k:1,v:0});send({t:'weuc',n:16,k:3,r:0});wPat();
+ tset(WVOC('Gate'),6);tset(WVOC('Volume'),6);
+ wsetv(20,17);wsetv(21,4);oscHeader();                 // Cytomic SVF LP into the Huovilainen ladder
+ tset(WK.f1[0],100);tset(WK.f1[1],.1);tset(WK.f1[2],6);
+ tset(WK.f2[0],86);tset(WK.f2[1],.12);tset(WK.f2[2],12);tset(WK.f2[3],1.2);
+ if($('froute').querySelector('.on')?.dataset.r!=='0')$('froute').querySelector('[data-r="0"]').click();
+ $('sdemo').click();if(!ss.on)$('son').click();
+ $('spmode').querySelector('[data-v="0"]').click();$('sorder').querySelector('[data-v="0"]').click();
+ tset(SKK(2),-3);tset(SKK(3),.45);
+ ss.steps=16;ss.hits=16;ss.rot=0;ssend(11,16);ssend(12,16);ssend(13,0);sPat();
+ if(!vst.on)$('von').click();
+ tset(VK.vcomp,64);tset(VK.vin,-6);tset(VK.vout,-6);tset(VK.vnoise,48);tset(VK.vwow,40);   // -6 / -6: no clipping
+ if(bst.on)$('bon').click();
+ showSec('play')}
+$('lofi').addEventListener('click',lofiScene);
 
 // audio
 async function start(){
@@ -961,7 +992,7 @@ async function start(){
  const bin=atob(WASM_GZ),gz=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)gz[i]=bin.charCodeAt(i);
  const wasm=await new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
  node.port.postMessage({t:'init',wasm},[wasm]);
- send({t:'set',id:4,v:bpm});sendVinyl();sendSmpAll();sendWaveAll();sendModsAll();
+ send({t:'set',id:4,v:bpm});send({t:'set',id:7,v:(swing-50)/50});sendVinyl();sendSmpAll();sendWaveAll();sendModsAll();
  started=true;
 }
 $('play').addEventListener('click',async()=>{

@@ -40,6 +40,7 @@ class WaveLane
     bool mute = false;
     int steps = 16, hits = 4, rotate = 0;
     int lastChord = 0;       // index in the progression, for the display
+    int progression = 0;     // 0: Am F C G triads, 1: lofi Fmaj9 Em9 Dm9 Cmaj9
     int notesHeld = 0;
 
   private:

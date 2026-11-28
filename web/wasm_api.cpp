@@ -9,7 +9,9 @@
 static constexpr int kBlock = 32;   // frames per fl_render()
 // the sequencer clock: 16ths at `bpm`, resolved at block starts; step counts 1..16 after each tick, as
 // filter-lab's did (the page and the wave lane read it that way)
-static struct Clock { float bpm = 120.f; int step = 0, bar = 0; double toNext = 0.0; } clk;
+// swing: each pair of 16ths lasts two 16ths, the first (1 + swing) of one, the second (1 - swing); 0 = straight,
+// 1/3 = triplet
+static struct Clock { float bpm = 120.f, swing = 0.f; int step = 0, bar = 0; double toNext = 0.0; } clk;
 // the sampler's RAM: 2^21 mono frames (47.5 s at 44.1 kHz, 8 MB) in the page; on the Pi a static array too
 static constexpr int kSmpFrames = 1 << 21;
 static float smpRam[kSmpFrames];
@@ -61,7 +63,7 @@ API void fl_render()
     {
         if (clk.step >= 16) { clk.step = 0; ++clk.bar; }
         ++clk.step;
-        clk.toNext += sampleRate * 60.0 / clk.bpm / 4.0;
+        clk.toNext += sampleRate * 60.0 / clk.bpm / 4.0 * (clk.step & 1 ? 1.0 + clk.swing : 1.0 - clk.swing);
     }
     bool tick = false;
     // each new 16th triggers the wave lane and the sampler
@@ -141,6 +143,7 @@ API const char *fl_filter_name(int i) { return synth::SstFilter::model_name(i); 
 API void fl_set(int id, float v)
 {
     if (id == 4) clk.bpm = v;   // tempo
+    if (id == 7) clk.swing = v < 0.f ? 0.f : (v > 0.4f ? 0.4f : v);
 }
 API int fl_step() { return clk.step; }
 API int fl_bar() { return clk.bar; }
@@ -159,6 +162,7 @@ API void fl_wave_cfg(int k, float v)
     case 2: wave.gate = v; break;
     case 3: wave.volume = std::pow(10.f, v / 20.f); break;
     case 4: wave.mute = v > 0.5f; if (wave.mute) wave.AllNotesOff(); break;
+    case 5: wave.progression = (int)v; break;
     }
 }
 API void fl_wave_euclid(int n, int k, int r) { wave.steps = n; wave.hits = k; wave.rotate = r; }

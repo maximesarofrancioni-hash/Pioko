@@ -28,8 +28,15 @@ float g_defaults[synth::TripleWaveGroup::kParamCount];
 float g_base[synth::TripleWaveGroup::kParamCount];   // values set by the user/preset (modulation adds to these)
 float g_points[128];
 
-// A minor: Am F C G, one chord per bar (MIDI notes of the triad around A3)
-const int kProg[4][3] = {{57, 60, 64}, {53, 57, 60}, {55, 60, 64}, {55, 59, 62}};
+// One chord per bar, four bars: the chord's notes (MIDI, around A3) and its bass note (Chord mode plays it under the
+// chord, Bass mode an octave lower).
+struct Chord { int n[4]; int count; int bass; };
+const Chord kProgs[2][4] = {
+    // A minor: Am F C G triads, the bass an octave under the root
+    {{{57, 60, 64}, 3, 45}, {{53, 57, 60}, 3, 41}, {{55, 60, 64}, 3, 43}, {{55, 59, 62}, 3, 43}},
+    // lofi: Fmaj9 Em9 Dm9 Cmaj9, rootless four-note voicings over the root (a descending iv-iii-ii-I in C)
+    {{{57, 60, 64, 67}, 4, 41}, {{55, 59, 62, 66}, 4, 40}, {{53, 57, 60, 64}, 4, 38}, {{52, 55, 59, 62}, 4, 36}},
+};
 const int kArpOrder[8] = {0, 1, 2, 1, 0, 2, 1, 2};
 } // namespace
 
@@ -124,25 +131,26 @@ void WaveLane::Tick(int step, int bar, double samplesPer16th)
     if (!g_engine || mute || mode >= kShift || !Hit(step))
         return;
     lastChord = bar & 3;
-    const int *c = kProg[lastChord];
+    const Chord &ch = kProgs[progression == 1 ? 1 : 0][lastChord];
+    const int *c = ch.n;
     const int oct = 12 * octave;
     const float vel = (step % 4 == 0) ? 0.95f : 0.75f;
     const int first = m_nHeld;
     switch (mode)
     {
     case kChord:
-        for (int i = 0; i < 3; ++i)
+        for (int i = 0; i < ch.count; ++i)
             NoteOn(c[i] + oct, vel);
-        NoteOn(c[0] - 12 + oct, vel * 0.8f);
+        NoteOn(ch.bass + oct, vel * 0.8f);
         break;
     case kArp:
     {
         int k = kArpOrder[m_arp++ & 7];
-        NoteOn(c[k] + oct + ((m_arp & 8) ? 12 : 0), vel);
+        NoteOn(c[k % ch.count] + oct + ((m_arp & 8) ? 12 : 0), vel);
         break;
     }
     default:
-        NoteOn(c[0] - 24 + oct, vel);
+        NoteOn(ch.bass - 12 + oct, vel);
         break;
     }
     const double len = gate * samplesPer16th;
