@@ -8,6 +8,9 @@
 #include "synth/mseg.h"
 #include "synth/oscillator.h"
 #include "synth/svf.h"
+#ifdef OSC440_SST_FILTERS
+#include "synth/sst_filter.h"
+#endif
 #include "synth/voice_group.h"
 
 namespace synth {
@@ -18,7 +21,10 @@ namespace synth {
 //     neighbouring oscillator, each with a 6-stage loopable wave envelope
 //   -> mix (levels modulated at audio rate: AM, ring modulation)
 //   -> SEM-style multimode SVF (no self-oscillation) -> 4-pole ladder
-//      (saturation, resonance compensation, 1x or 2x), or both in parallel
+//      (saturation, resonance compensation, 1x or 2x), or both in parallel;
+//      built with OSC440_SST_FILTERS, two sst-filters models instead (filter 1
+//      in the SVF's place and parameters, filter 2 in the ladder's), each any of
+//      SstFilter's models
 //   -> VCA -> pan
 // 4 DADSRs (1: filters, 2: VCA, 3-4: free; exponential or PPG curves), 4 LFOs
 // (10 shapes, delay, reset) and a 16-slot matrix whose oscillator and noise
@@ -49,6 +55,8 @@ class TripleWaveGroup final : public VoiceGroup {
     kParamLadderOversample,   // 1 (default): 2x against aliasing; 0: 1x
     kParamPan,                // -1..1
     kParamModWheel, kParamPressure, kParamExpression,   // 0..1 (matrix sources)
+    kParamFilter1Model = 20,  // OSC440_SST_FILTERS: SstFilter model of filter 1 (in the SVF's place)
+    kParamFilter2Model,       // OSC440_SST_FILTERS: SstFilter model of filter 2 (in the ladder's place)
 
     kParamEnvBase = 50,       // + env * kEnvStride + EnvField
     kParamOscBase = 100,      // + osc * kOscStride + OscField
@@ -109,9 +117,14 @@ class TripleWaveGroup final : public VoiceGroup {
     Mseg wave_env[kOscs];
     Dadsr env[kEnvs];
     Lfo lfo[kLfos];
+#ifdef OSC440_SST_FILTERS
+    SstFilter f1, f2;
+    bool f1_bypassed = true;   // filter 1 fully open, as the SVF: skipped
+#else
     Svf svf;
     Ladder ladder;
     OversampledLadder ladder2x;
+#endif
     float pitch = 69.0f, velocity = 0.0f;
     float osc_level[kOscs] = {0.0f, 0.0f, 0.0f};   // at the end of the last block
     float gain_l = 0.0f, gain_r = 0.0f;
@@ -125,7 +138,11 @@ class TripleWaveGroup final : public VoiceGroup {
   void render_voice(Voice& v, Bus& out);
   void update_matrix_flags();
   void update_usage();
+#ifdef OSC440_SST_FILTERS
+  void f1_block(Voice& v, float* x, bool bypass);
+#else
   void svf_block(Voice& v, float* x, bool bypass);
+#endif
 
   Voice voice_[kVoices];
   float params_[kParamCount] = {};
@@ -150,6 +167,7 @@ class TripleWaveGroup final : public VoiceGroup {
   float ladder_cutoff_ = 72.0f, ladder_resonance_ = 0.2f, drive_ = 1.0f, compensation_ = 0.5f;
   float ladder_env_ = 36.0f;
   bool bandpass_ = false, parallel_ = false, oversample_ = true;
+  int filter_model_[2] = {11, 4};   // OSC440_SST_FILTERS: OB-Xd 12 dB LP (SEM-ish), Huovilainen ladder (bass comp)
   float key_track_ = 1.0f, pan_ = 0.0f;
   float mod_wheel_ = 0.0f, pressure_ = 0.0f, expression_ = 0.0f;
 };

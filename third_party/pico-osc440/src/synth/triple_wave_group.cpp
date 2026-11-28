@@ -24,7 +24,7 @@ TripleWaveGroup::TripleWaveGroup() {
       {kParamDrive, 1.0f},         {kParamCompensation, 0.5f},   {kParamLadderEnvAmount, 36.0f},
       {kParamFilterRouting, 0.0f}, {kParamKeyTrack, 1.0f},       {kParamLadderOversample, 1.0f},
       {kParamPan, 0.0f},           {kParamModWheel, 0.0f},       {kParamPressure, 0.0f},
-      {kParamExpression, 0.0f}};
+      {kParamExpression, 0.0f},    {kParamFilter1Model, 11.0f},  {kParamFilter2Model, 4.0f}};
   for (const auto& g : globals) set_param(g.id, g.value);
   for (int o = 0; o < kOscs; ++o) {
     const float defaults[] = {0.0f, 0.0f, 0.0f, 0.0f, o == 0 ? 1.0f : 0.0f, 0.0f, 0.0f, 0.5f, 0.0f, 0.0f};
@@ -231,6 +231,8 @@ void AUDIO_HOT(TripleWaveGroup::set_param)(uint16_t id, float value) {
     case kParamModWheel: mod_wheel_ = value; break;
     case kParamPressure: pressure_ = value; break;
     case kParamExpression: expression_ = value; break;
+    case kParamFilter1Model: filter_model_[0] = static_cast<int>(value + 0.5f); break;
+    case kParamFilter2Model: filter_model_[1] = static_cast<int>(value + 0.5f); break;
     default: break;
   }
 }
@@ -281,6 +283,16 @@ void AUDIO_HOT(TripleWaveGroup::render_voice)(Voice& v, Bus& out) {
   const float svf_res = dsp::clamp(svf_resonance_ + dst[mod::kDstResonance1], 0.0f, 1.0f);
   // Fully open, no resonance, low pass: the SVF would only shave the top octave
   // a little, so it is left out
+#ifdef OSC440_SST_FILTERS
+  // filter 1 fully open with no resonance is left out, as the SVF was
+  const bool svf_bypass = svf_note >= kSvfOpenNote && svf_res == 0.0f;
+  v.f1.set_model(filter_model_[0]);
+  v.f2.set_model(filter_model_[1]);
+  if (!svf_bypass) v.f1.set(svf_note, svf_res);
+  const float f2_note = ladder_cutoff_ + key + ladder_env_ * fenv + dst[mod::kDstCutoff2];
+  v.f2.set(f2_note, dsp::clamp(ladder_resonance_ + dst[mod::kDstResonance2], 0.0f, 1.0f));
+  const float drive = drive_ + dst[mod::kDstDrive];
+#else
   const bool svf_bypass = svf_note >= kSvfOpenNote && svf_res == 0.0f && morph_ <= 0.0f && !bandpass_;
   if (!svf_bypass || !v.svf_bypassed) {
     v.svf.set_normalized(dsp::note_to_hz(svf_note) * kInvSampleRate, kSvfMaxResonance * svf_res);
@@ -293,6 +305,7 @@ void AUDIO_HOT(TripleWaveGroup::render_voice)(Voice& v, Bus& out) {
   } else {
     v.ladder.set(ladder_fc, res, drive, compensation_);
   }
+#endif
 
   const float amp = dsp::clamp(src[mod::kSrcEnv2] * v.velocity * level_ + dst[mod::kDstAmp], 0.0f, 1.0f);
   const float angle = (dsp::clamp(pan_ + dst[mod::kDstPan], -1.0f, 1.0f) + 1.0f) * 0.125f;
@@ -364,6 +377,23 @@ void AUDIO_HOT(TripleWaveGroup::render_voice)(Voice& v, Bus& out) {
 
   // Filters: SVF -> ladder (1x or 2x), or both in parallel
   float filtered[kN];
+#ifdef OSC440_SST_FILTERS
+  // filter 1 -> filter 2 (drive into filter 2, as into the ladder), or both in parallel
+  {
+    float f2in[kN];
+    if (parallel_) {
+      dsp::copy(filtered, mix, kN);
+      f1_block(v, filtered, svf_bypass);
+      for (size_t i = 0; i < kN; ++i) f2in[i] = mix[i] * drive;
+      v.f2.process_block(f2in, kN);
+      for (size_t i = 0; i < kN; ++i) filtered[i] = 0.5f * (filtered[i] + f2in[i]);
+    } else {
+      f1_block(v, mix, svf_bypass);
+      for (size_t i = 0; i < kN; ++i) filtered[i] = mix[i] * drive;
+      v.f2.process_block(filtered, kN);
+    }
+  }
+#else
   if (parallel_) {
     for (size_t i = 0; i < kN; ++i) filtered[i] = mix[i];
     svf_block(v, filtered, svf_bypass);
@@ -384,6 +414,7 @@ void AUDIO_HOT(TripleWaveGroup::render_voice)(Voice& v, Bus& out) {
       v.ladder.process_block(filtered, kN);
     }
   }
+#endif
 
   // VCA (ramped, plus audio-rate modulation) and pan
   const float target_l = amp * pan_l, target_r = amp * pan_r;
@@ -416,6 +447,25 @@ void AUDIO_HOT(TripleWaveGroup::render_voice)(Voice& v, Bus& out) {
   }
 }
 
+#ifdef OSC440_SST_FILTERS
+// Filter 1 in place, or skipped; on a change between the two, one block's crossfade
+void AUDIO_HOT(TripleWaveGroup::f1_block)(Voice& v, float* x, bool bypass) {
+  if (bypass && v.f1_bypassed) return;
+  if (!bypass && !v.f1_bypassed) {
+    v.f1.process_block(x, kN);
+    return;
+  }
+  float wet[kN];
+  dsp::copy(wet, x, kN);
+  v.f1.process_block(wet, kN);
+  for (size_t i = 0; i < kN; ++i) {
+    const float g = static_cast<float>(i + 1) * (1.0f / kN);   // towards the new state
+    x[i] = bypass ? wet[i] + (x[i] - wet[i]) * g : x[i] + (wet[i] - x[i]) * g;
+  }
+  if (bypass) v.f1.reset();   // starts clean when it comes back
+  v.f1_bypassed = bypass;
+}
+#else
 // The SVF in place, or skipped; on a change between the two, one block's crossfade
 void AUDIO_HOT(TripleWaveGroup::svf_block)(Voice& v, float* x, bool bypass) {
   if (bypass && v.svf_bypassed) return;
@@ -433,6 +483,7 @@ void AUDIO_HOT(TripleWaveGroup::svf_block)(Voice& v, float* x, bool bypass) {
   if (bypass) v.svf.reset();   // starts clean when it comes back
   v.svf_bypassed = bypass;
 }
+#endif
 
 void AUDIO_HOT(TripleWaveGroup::render)(Bus& out) {
   if (usage_dirty_) update_usage();
